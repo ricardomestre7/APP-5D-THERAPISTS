@@ -760,13 +760,28 @@ export const Sessao = {
             filters.push({ field: 'paciente_id', operator: '==', value: params.paciente_id });
         }
         
+        // IMPORTANTE: Filtrar por terapeuta_id quando disponível para evitar sessões de outros terapeutas
+        if (params && params.terapeuta_id) {
+            filters.push({ field: 'terapeuta_id', operator: '==', value: params.terapeuta_id });
+        }
+        
+        // Se passar created_by (email), não podemos filtrar diretamente, mas vamos validar depois
+        const filterByEmail = params && params.created_by;
+        
         // Firestore requer índice composto para filtro + ordenação
         // Vamos buscar sem ordenação e ordenar em memória para evitar necessidade de criar índice
         const sessoes = await queryDocuments('sessoes', filters, null, 'asc');
         console.log(`✅ ${sessoes.length} sessão(ões) encontrada(s) no Firestore`);
         
+        // Se filtrou por email (created_by), validar após buscar
+        let sessoesValidadas = sessoes;
+        if (filterByEmail) {
+            sessoesValidadas = sessoes.filter(s => s.created_by === params.created_by);
+            console.log(`🔍 Filtrado por email: ${sessoesValidadas.length} sessão(ões) válidas`);
+        }
+        
         // Converter timestamps do Firestore para strings ISO
-        let sessoesProcessadas = sessoes.map(s => ({
+        let sessoesProcessadas = sessoesValidadas.map(s => ({
             ...s,
             data_sessao: s.data_sessao?.toDate?.()?.toISOString() || s.data_sessao,
             created_at: s.created_at?.toDate?.()?.toISOString() || s.created_at,

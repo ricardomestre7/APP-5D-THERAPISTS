@@ -11,25 +11,36 @@ const GraficoRadarEstilizado = ({ labels, data, titulo }) => {
         enabled: true,
         blur: 1,
         opacity: 0.2
-      }
+      },
+      zoom: {
+        enabled: false
+      },
+      // Aumentar padding para evitar que labels sejam cortados
+      offsetX: 10,
+      offsetY: 20
     },
     title: {
       text: titulo || 'Análise Multidimensional',
       align: 'center',
       style: { 
-        fontSize: '18px',
+        fontSize: '20px', // Aumentado de 18px para 20px
         fontWeight: 'bold',
-        color: '#1f2937'
-      }
+        color: '#1f2937',
+        fontFamily: 'system-ui, -apple-system, sans-serif'
+      },
+      offsetY: 10 // Espaçamento do topo
     },
     xaxis: {
       categories: labels, // Os "raios" do radar
       labels: {
         style: {
           colors: ['#4b5563', '#4b5563', '#4b5563', '#4b5563', '#4b5563', '#4b5563'],
-          fontSize: '12px',
-          fontWeight: 500
-        }
+          fontSize: '14px', // Aumentado de 12px para 14px
+          fontWeight: 600 // Aumentado de 500 para 600 para melhor legibilidade
+        },
+        // Rotacionar labels se forem muito longos
+        rotate: labels.some(l => l.length > 15) ? -45 : 0,
+        maxHeight: 60
       }
     },
     yaxis: {
@@ -39,7 +50,7 @@ const GraficoRadarEstilizado = ({ labels, data, titulo }) => {
       labels: {
         style: {
           colors: '#6b7280',
-          fontSize: '11px'
+          fontSize: '13px' // Aumentado de 11px para 13px
         }
       }
     },
@@ -91,7 +102,12 @@ const GraficoRadarEstilizado = ({ labels, data, titulo }) => {
     }
   ];
 
-  return <Chart options={options} series={series} type="radar" height={400} />;
+  // Aumentar altura para gráficos com muitos labels ou labels longos
+  const numLabels = labels.length;
+  const temLabelsLongos = labels.some(l => l.length > 20);
+  const alturaFinal = temLabelsLongos || numLabels > 6 ? 500 : 450; // Aumentado de 400 para 450-500px
+  
+  return <Chart options={options} series={series} type="radar" height={alturaFinal} />;
 };
 
 export default GraficoRadarEstilizado;

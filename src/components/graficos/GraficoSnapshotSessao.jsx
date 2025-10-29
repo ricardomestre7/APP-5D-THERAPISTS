@@ -7,7 +7,7 @@ import GraficoAreaEstilizado from './GraficoAreaEstilizado';
 import GraficoMandala from './GraficoMandala';
 
 // TAMANHO PADRÃO para todos os gráficos (garante consistência visual)
-const ALTURA_GRAFICO_PADRAO = 400;
+const ALTURA_GRAFICO_PADRAO = 450; // Aumentado de 400 para 450px
 const LARGURA_GRAFICO_PADRAO = '100%';
 
 // Props:
@@ -54,11 +54,18 @@ const GraficoSnapshotSessao = ({ terapia, dadosDaSessao }) => {
   const tipoVisualizacao = terapia.tipo_visualizacao_sugerido || 'radar'; // Padrão é radar
 
   // Wrapper para garantir tamanho consistente em todos os gráficos
+  // Para gráficos radar com muitos campos ou labels longos, aumentar altura
+  const temLabelsLongos = labels.some(l => l.length > 20);
+  const numCampos = labels.length;
+  const alturaWrapper = (tipoVisualizacao === 'radar' && (temLabelsLongos || numCampos > 6)) 
+    ? 550 // Mais alto para radares complexos
+    : ALTURA_GRAFICO_PADRAO;
+  
   const WrapperGrafico = ({ children }) => (
     <div style={{ 
       width: LARGURA_GRAFICO_PADRAO, 
-      height: `${ALTURA_GRAFICO_PADRAO}px`,
-      minHeight: `${ALTURA_GRAFICO_PADRAO}px`,
+      height: `${alturaWrapper}px`,
+      minHeight: `${alturaWrapper}px`,
       position: 'relative'
     }}>
       {children}

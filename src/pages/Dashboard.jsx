@@ -27,11 +27,18 @@ export default function Dashboard() {
                     return;
                 }
 
-                const [pacientesList, terapiasList, sessoesList] = await Promise.all([
+                const [pacientesList, terapiasList, todasSessoes] = await Promise.all([
                     Paciente.filter({ terapeuta_id: currentUser.id }),
                     Terapia.list(),
-                    Sessao.filter({ created_by: currentUser.email })
+                    Sessao.filter({ terapeuta_id: currentUser.id }) // Filtrar por terapeuta_id
                 ]);
+                
+                // Filtrar sessões órfãs (sem paciente válido)
+                const pacienteIds = new Set(pacientesList.map(p => p.id));
+                const sessoesList = todasSessoes.filter(sessao => {
+                    // Só contar sessões que têm paciente_id válido e o paciente ainda existe
+                    return sessao.paciente_id && pacienteIds.has(sessao.paciente_id);
+                });
                 
                 setStats({
                     pacientes: pacientesList.length,

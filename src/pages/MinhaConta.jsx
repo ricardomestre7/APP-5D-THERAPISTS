@@ -1,13 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
-import { User } from '@/api/entities';
+import { User, Sessao, Paciente } from '@/api/entities';
 // Base44 removido
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Save, Loader2, Camera, Lock, Eye, EyeOff, CheckCircle2, GraduationCap, Award, FileText } from 'lucide-react';
+import { Save, Loader2, Camera, Lock, Eye, EyeOff, CheckCircle2, GraduationCap, Award, FileText, Trash2, AlertTriangle } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -47,6 +48,11 @@ export default function MinhaContaPage() {
     });
     const [isSavingSenha, setIsSavingSenha] = useState(false);
     const [senhaMessage, setSenhaMessage] = useState({ type: '', text: '' });
+    
+    // Estados para limpeza de sessões órfãs
+    const [sessoesOrfas, setSessoesOrfas] = useState([]);
+    const [isLoadingOrfas, setIsLoadingOrfas] = useState(false);
+    const [isDeletingOrfas, setIsDeletingOrfas] = useState(false);
     
     useEffect(() => {
         const loadUser = async () => {
@@ -184,6 +190,72 @@ export default function MinhaContaPage() {
         return name.substring(0, 2).toUpperCase();
     };
 
+    // Funções para gerenciar sessões órfãs
+    const handleVerificarSessoesOrfas = async () => {
+        setIsLoadingOrfas(true);
+        try {
+            const currentUser = await User.me();
+            
+            // Buscar todas as sessões do terapeuta
+            const todasSessoes = await Sessao.filter({ terapeuta_id: currentUser.id });
+            
+            // Buscar todos os pacientes do terapeuta
+            const pacientes = await Paciente.filter({ terapeuta_id: currentUser.id });
+            const pacienteIds = new Set(pacientes.map(p => p.id));
+            
+            // Filtrar sessões órfãs (sem paciente_id válido ou paciente não existe)
+            const sessoesOrfasEncontradas = todasSessoes.filter(sessao => {
+                return !sessao.paciente_id || !pacienteIds.has(sessao.paciente_id);
+            });
+            
+            setSessoesOrfas(sessoesOrfasEncontradas);
+            
+            if (sessoesOrfasEncontradas.length === 0) {
+                alert('✅ Nenhuma sessão órfã encontrada! Todos os dados estão corretos.');
+            }
+        } catch (error) {
+            console.error('Erro ao verificar sessões órfãs:', error);
+            alert('Erro ao verificar sessões órfãs. Tente novamente.');
+        } finally {
+            setIsLoadingOrfas(false);
+        }
+    };
+
+    const handleRemoverSessoesOrfas = async () => {
+        if (sessoesOrfas.length === 0) return;
+        
+        setIsDeletingOrfas(true);
+        try {
+            let removidas = 0;
+            let erros = 0;
+            
+            for (const sessao of sessoesOrfas) {
+                try {
+                    await Sessao.delete(sessao.id);
+                    removidas++;
+                } catch (error) {
+                    console.error(`Erro ao remover sessão ${sessao.id}:`, error);
+                    erros++;
+                }
+            }
+            
+            alert(
+                `✅ Remoção concluída!\n\n` +
+                `- ${removidas} sessão(ões) removida(s) com sucesso\n` +
+                (erros > 0 ? `- ${erros} erro(s) durante a remoção\n` : '')
+            );
+            
+            // Limpar a lista de sessões órfãs
+            setSessoesOrfas([]);
+            
+        } catch (error) {
+            console.error('Erro ao remover sessões órfãs:', error);
+            alert('Erro ao remover sessões. Algumas podem não ter sido removidas.');
+        } finally {
+            setIsDeletingOrfas(false);
+        }
+    };
+
     return (
         <div className="bg-white min-h-screen">
             <header className="mb-8">
@@ -192,9 +264,10 @@ export default function MinhaContaPage() {
             </header>
 
             <Tabs defaultValue="perfil" className="space-y-6">
-                <TabsList className="grid w-full grid-cols-2 bg-gray-100">
+                <TabsList className="grid w-full grid-cols-3 bg-gray-100">
                     <TabsTrigger value="perfil" className="font-semibold">Perfil</TabsTrigger>
                     <TabsTrigger value="seguranca" className="font-semibold">Segurança</TabsTrigger>
+                    <TabsTrigger value="dados" className="font-semibold">Limpeza de Dados</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="perfil">
@@ -400,6 +473,143 @@ export default function MinhaContaPage() {
                                     {isSavingSenha ? 'Alterando...' : 'Alterar Senha'}
                                 </Button>
                             </div>
+                        </CardContent>
+                    </QuantumCard>
+                </TabsContent>
+
+                <TabsContent value="dados">
+                    <QuantumCard>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-3 text-xl font-bold text-slate-900">
+                                <AlertTriangle className="text-orange-500" />
+                                Limpeza de Sessões Órfãs
+                            </CardTitle>
+                            <CardDescription className="text-gray-600">
+                                Remova sessões que não têm pacientes associados ou pacientes que foram deletados.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                                <div className="flex items-start gap-3">
+                                    <AlertTriangle className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="text-sm font-semibold text-orange-800 mb-1">O que são sessões órfãs?</p>
+                                        <p className="text-sm text-orange-700">
+                                            São sessões que foram criadas mas não têm um paciente válido associado, ou o paciente foi deletado. 
+                                            Essas sessões aparecem incorretamente nas estatísticas e podem causar confusão.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-semibold text-gray-700">
+                                        Sessões órfãs encontradas: <span className="text-orange-600">{sessoesOrfas.length}</span>
+                                    </p>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Clique em "Verificar Sessões" para identificar sessões órfãs
+                                    </p>
+                                </div>
+                                <Button 
+                                    onClick={handleVerificarSessoesOrfas}
+                                    disabled={isLoadingOrfas}
+                                    variant="outline"
+                                    className="border-orange-300 text-orange-700 hover:bg-orange-50"
+                                >
+                                    {isLoadingOrfas ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                            Verificando...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <AlertTriangle className="w-4 h-4 mr-2" />
+                                            Verificar Sessões
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
+
+                            {sessoesOrfas.length > 0 && (
+                                <div className="border border-orange-200 rounded-lg p-4 bg-orange-50">
+                                    <p className="text-sm font-semibold text-orange-800 mb-3">
+                                        {sessoesOrfas.length} sessão(ões) órfã(s) encontrada(s):
+                                    </p>
+                                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                                        {sessoesOrfas.map(sessao => (
+                                            <div key={sessao.id} className="bg-white p-3 rounded border border-orange-200">
+                                                <p className="text-xs font-semibold text-gray-700">
+                                                    ID: {sessao.id}
+                                                </p>
+                                                <p className="text-xs text-gray-600">
+                                                    Data: {sessao.data_sessao ? new Date(sessao.data_sessao).toLocaleDateString('pt-BR') : 'N/A'}
+                                                </p>
+                                                <p className="text-xs text-red-600">
+                                                    Paciente ID: {sessao.paciente_id || 'Não definido'}
+                                                </p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {sessoesOrfas.length > 0 && (
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button 
+                                            disabled={isDeletingOrfas}
+                                            variant="destructive"
+                                            className="w-full"
+                                        >
+                                            {isDeletingOrfas ? (
+                                                <>
+                                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                                    Removendo...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Trash2 className="w-4 h-4 mr-2" />
+                                                    Remover Todas as Sessões Órfãs ({sessoesOrfas.length})
+                                                </>
+                                            )}
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle className="flex items-center gap-2">
+                                                <AlertTriangle className="w-5 h-5 text-orange-500" />
+                                                Confirmar Remoção
+                                            </AlertDialogTitle>
+                                            <AlertDialogDescription className="text-gray-700">
+                                                Você está prestes a remover <strong>{sessoesOrfas.length} sessão(ões) órfã(s)</strong> permanentemente.
+                                                Esta ação não pode ser desfeita. Tem certeza que deseja continuar?
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                            <AlertDialogAction
+                                                onClick={handleRemoverSessoesOrfas}
+                                                className="bg-red-600 hover:bg-red-700"
+                                            >
+                                                Sim, Remover Todas
+                                            </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            )}
+
+                            {sessoesOrfas.length === 0 && !isLoadingOrfas && sessoesOrfas.length !== undefined && (
+                                <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+                                    <CheckCircle2 className="w-8 h-8 text-green-600 mx-auto mb-2" />
+                                    <p className="text-sm font-semibold text-green-800">
+                                        Nenhuma sessão órfã encontrada!
+                                    </p>
+                                    <p className="text-xs text-green-700 mt-1">
+                                        Seus dados estão limpos e organizados.
+                                    </p>
+                                </div>
+                            )}
                         </CardContent>
                     </QuantumCard>
                 </TabsContent>

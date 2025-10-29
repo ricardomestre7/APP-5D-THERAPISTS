@@ -63,7 +63,7 @@ const SessaoHistoryItem = ({ sessao, terapia }) => {
             <CardContent className="space-y-4">
                 {/* Gráfico Inteligente baseado no tipo de terapia */}
                 {temGrafico && (
-                    <div className="border-t border-gray-200 pt-4 min-h-[450px] w-full">
+                    <div className="border-t border-gray-200 pt-4 min-h-[500px] w-full">
                         <GraficoSnapshotSessao
                             terapia={terapia}
                             dadosDaSessao={sessao.resultados || {}}
