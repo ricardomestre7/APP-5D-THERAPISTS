@@ -9,8 +9,8 @@
  * 4. Na seção "Your apps", clique em "</>" (Web)
  * 5. Copie as credenciais do Firebase
  * 
- * Opção A - Usar arquivo .env (recomendado):
- * Crie um arquivo .env na raiz do projeto:
+ * Opção A - Usar arquivo .env (RECOMENDADO e SEGURO):
+ * Crie um arquivo .env.local na raiz do projeto:
  * 
  * VITE_FIREBASE_API_KEY=AIza...
  * VITE_FIREBASE_AUTH_DOMAIN=seu-projeto.firebaseapp.com
@@ -19,8 +19,10 @@
  * VITE_FIREBASE_MESSAGING_SENDER_ID=123456789
  * VITE_FIREBASE_APP_ID=1:123456:web:abc123
  * 
- * Opção B - Editar diretamente:
- * Substitua os valores padrão abaixo pelas suas credenciais
+ * O arquivo .env.local está protegido pelo .gitignore e NÃO será enviado ao GitHub.
+ * 
+ * Opção B - Configuração padrão (fallback):
+ * As credenciais abaixo são usadas como fallback se as variáveis de ambiente não estiverem definidas.
  */
 
 import { initializeApp } from 'firebase/app';
@@ -29,13 +31,15 @@ import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
 // Firebase configuration object
+// Usa variáveis de ambiente se disponíveis (recomendado para segurança)
+// Caso contrário, usa valores padrão como fallback
 const firebaseConfig = {
-  apiKey: "AIzaSyA0TAi6othrUEuoGvsG1N3n61IE2bSSF5Q",
-  authDomain: "quantumleap-akwyh.firebaseapp.com",
-  projectId: "quantumleap-akwyh",
-  storageBucket: "quantumleap-akwyh.firebasestorage.app",
-  messagingSenderId: "547569031304",
-  appId: "1:547569031304:web:13166b794e7c00b985673d"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyA0TAi6othrUEuoGvsG1N3n61IE2bSSF5Q",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "quantumleap-akwyh.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "quantumleap-akwyh",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "quantumleap-akwyh.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "547569031304",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:547569031304:web:13166b794e7c00b985673d"
 };
 
 // Initialize Firebase
@@ -49,4 +53,5 @@ export const googleProvider = new GoogleAuthProvider();
 
 // Export app instance
 export default app;
+
 

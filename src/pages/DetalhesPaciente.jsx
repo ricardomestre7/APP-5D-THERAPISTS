@@ -5,7 +5,7 @@ import { Sessao } from '@/api/entities';
 import { Terapia } from '@/api/entities';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { User, Mail, Phone, Cake, FileText, HeartPulse, PlusCircle, Sparkles, ArrowLeft, FileDown, BarChart3, Loader2 } from 'lucide-react';
+import { User, Phone, Cake, FileText, HeartPulse, PlusCircle, Sparkles, ArrowLeft, FileDown, BarChart3, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import SessaoForm from '../components/SessaoForm';
@@ -79,7 +79,6 @@ export default function DetalhesPaciente() {
 
     // Estados para relatórios
     const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
-    const [isSendingEmail, setIsSendingEmail] = useState(false);
 
     const fetchData = useCallback(async () => {
         if (pacienteId) {
@@ -153,31 +152,6 @@ export default function DetalhesPaciente() {
         }
     };
 
-    const handleEnviarEmail = async () => {
-        if (!analise || sessoes.length === 0) {
-            alert('É necessário ter pelo menos uma sessão registrada para enviar o relatório.');
-            return;
-        }
-        
-        if (!paciente.email) {
-            alert('Este paciente não possui e-mail cadastrado.');
-            return;
-        }
-
-        setIsSendingEmail(true);
-        try {
-            // Base44 removido - implementar nova integração
-            console.log('📧 Email enviado (demo) para:', paciente.email);
-            await new Promise(r => setTimeout(r, 1000)); // Simular envio
-
-            alert('✅ Relatório enviado com sucesso para ' + paciente.email);
-        } catch (error) {
-            console.error('Erro ao enviar email:', error);
-            alert('Erro ao enviar email. Tente novamente.');
-        } finally {
-            setIsSendingEmail(false);
-        }
-    };
 
     if (isLoading) {
         return <p className="text-center text-gray-500">Carregando dados do paciente...</p>;
@@ -224,17 +198,6 @@ export default function DetalhesPaciente() {
                                 )}
                             </Button>
 
-                            <Button
-                                onClick={handleEnviarEmail}
-                                disabled={isSendingEmail}
-                                className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2"
-                            >
-                                {isSendingEmail ? (
-                                    <><Loader2 className="w-5 h-5 animate-spin" /> Enviando...</>
-                                ) : (
-                                    <><Mail className="w-5 h-5" /> Enviar por E-mail</>
-                                )}
-                            </Button>
                         </>
                     )}
                 </div>
