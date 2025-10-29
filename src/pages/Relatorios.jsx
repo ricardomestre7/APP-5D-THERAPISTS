@@ -70,7 +70,8 @@ export default function RelatoriosPage() {
             await gerarPDFRelatorio({
                 pacienteNome: paciente?.nome || 'Paciente',
                 analise,
-                terapeutaNome: currentUser?.full_name || 'Terapeuta'
+                terapeutaNome: currentUser?.full_name || 'Terapeuta',
+                sessoes: sessoes // Passa as sessões para o PDF
             });
             
         } catch (error) {
