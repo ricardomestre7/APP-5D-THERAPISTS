@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { MessageCircle, X, Send, Sparkles, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-// Base44 removido
+import { sendMessageToGemini, isGeminiAvailable } from '@/api/gemini';
 
 export default function ChatbotFloating() {
     const [isOpen, setIsOpen] = useState(false);
@@ -41,27 +41,80 @@ export default function ChatbotFloating() {
         if (!inputMessage.trim() || isLoading) return;
 
         const userMsg = inputMessage.trim();
+        const userMsgLower = userMsg.toLowerCase();
         setInputMessage('');
         setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
         setIsLoading(true);
 
         try {
-            // Base44 removido - implementar nova integração
-            await new Promise(r => setTimeout(r, 1000));
+            let response;
+            
+            // Try to use Gemini AI if available
+            if (isGeminiAvailable()) {
+                try {
+                    response = await sendMessageToGemini(userMsg);
+                } catch (geminiError) {
+                    console.error('Erro ao chamar Gemini, usando fallback:', geminiError);
+                    // Fallback to keyword-based responses
+                    response = getChatbotResponse(userMsgLower);
+                }
+            } else {
+                // Use keyword-based responses as fallback
+                response = getChatbotResponse(userMsgLower);
+            }
             
             setMessages(prev => [...prev, { 
                 role: 'assistant', 
-                content: 'Em breve, integração de chatbot será implementada!' 
+                content: response 
             }]);
         } catch (error) {
             console.error('Erro:', error);
             setMessages(prev => [...prev, { 
                 role: 'assistant', 
-                content: 'Desculpe, erro ao processar.' 
+                content: 'Desculpe, erro ao processar sua mensagem.' 
             }]);
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const getChatbotResponse = (message) => {
+        // Respostas baseadas em padrões de palavras-chave
+        
+        if (message.includes('ola') || message.includes('olá') || message.includes('oi') || message.includes('bom dia') || message.includes('boa tarde') || message.includes('boa noite')) {
+            return 'Olá! Sou o Agente 5D, seu assistente quântico. Como posso ajudar você hoje? 💫';
+        }
+        
+        if (message.includes('paciente') || message.includes('cadastrar') || message.includes('adicionar')) {
+            return 'Para cadastrar um paciente:\n1. Vá em "Pacientes" no menu lateral\n2. Clique em "Novo Paciente"\n3. Preencha os dados\n4. Clique em "Cadastrar"\n\n💡 Dica: Mantenha os dados atualizados!';
+        }
+        
+        if (message.includes('sessao') || message.includes('sessão')) {
+            return 'Para criar uma sessão:\n1. Acesse o paciente desejado\n2. Clique em "Nova Sessão"\n3. Selecione as terapias aplicadas\n4. Adicione observações\n5. Salve\n\n✨ Cada sessão ajuda a construir o histórico quântico do paciente!';
+        }
+        
+        if (message.includes('relatório') || message.includes('relatorio')) {
+            return 'Para gerar relatórios:\n1. Vá em "Relatórios" no menu\n2. Selecione um paciente\n3. Aguarde a análise quântica\n4. Clique em "Gerar PDF"\n\n📊 Os relatórios incluem gráficos, tendências e análises profundas!';
+        }
+        
+        if (message.includes('terapia') || message.includes('quântica')) {
+            return 'As terapias quânticas são modalidades que trabalham com:\n• Energia sutil do corpo\n• Frequências vibracionais\n• Cristais, ervas e óleos\n• Meditação e visualização\n\n✨ Cada terapia tem sua energia específica!';
+        }
+        
+        if (message.includes('ajuda') || message.includes('help')) {
+            return 'Posso ajudar com:\n• Cadastro de pacientes\n• Criação de sessões\n• Geração de relatórios\n• Informações sobre terapias\n• Navegação no sistema\n\n💬 Pergunte o que precisar!';
+        }
+        
+        if (message.includes('menu') || message.includes('navegação') || message.includes('navegacao')) {
+            return 'Menu Principal:\n🏠 Dashboard - Visão geral\n👥 Pacientes - Gerenciar\n✨ Terapias - Catálogo\n📚 Base de Conhecimento\n📊 Relatórios - Análises\n👤 Minha Conta - Perfil\n\n💡 Clique nos itens do menu para navegar!';
+        }
+        
+        if (message.includes('obrigado') || message.includes('obrigada') || message.includes('valeu') || message.includes('tchau')) {
+            return 'De nada! Fico feliz em ajudar. Qualquer dúvida, só chamar! 🌟\n\nTenha uma jornada quântica maravilhosa! ✨';
+        }
+        
+        // Resposta padrão
+        return 'Entendi! Para melhor te ajudar, posso orientar sobre:\n• Cadastro de pacientes\n• Criação de sessões\n• Geração de relatórios\n• Terapias quânticas\n• Navegação no sistema\n\n💬 Como deseja prosseguir?';
     };
 
     return (
