@@ -53,11 +53,19 @@ exports.gerarPDFRelatorio = functions.https.onCall(async (data, context) => {
         '--disable-dev-shm-usage',
         '--disable-gpu',
         '--disable-web-security',
-        '--font-render-hinting=none' // Melhor renderização de texto
+        '--font-render-hinting=none', // Melhor renderização de texto
+        '--lang=pt-BR', // Definir locale para pt-BR
+        '--disable-features=TranslateUI' // Desabilitar tradução
       ]
     });
 
     const page = await browser.newPage();
+    
+    // Configurar encoding e locale explicitamente
+    await page.setExtraHTTPHeaders({
+      'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+      'Content-Language': 'pt-BR'
+    });
     
     // Configurar viewport maior para melhor qualidade
     await page.setViewport({ 
@@ -65,12 +73,47 @@ exports.gerarPDFRelatorio = functions.https.onCall(async (data, context) => {
       height: 2400,
       deviceScaleFactor: 2 // Aumentar DPI para melhor qualidade
     });
+    
+    // Configurar contexto de navegação para UTF-8
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, 'language', {
+        get: () => 'pt-BR'
+      });
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ['pt-BR', 'pt', 'en']
+      });
+    });
+
+    // Sanitizar dados ANTES de gerar HTML (função auxiliar)
+    const sanitizeText = (text) => {
+      if (!text) return '';
+      try {
+        let str = String(text).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+        str = str.normalize('NFC');
+        return str
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      } catch (error) {
+        return String(text).replace(/[^\w\s\.\,\!\?\-\:]/gi, '');
+      }
+    };
 
     // Gerar HTML do relatório
     const htmlContent = generateHTMLReport(data);
 
-    // Carregar HTML na página
-    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+    // Definir encoding UTF-8 explicitamente na página ANTES de carregar conteúdo
+    await page.setExtraHTTPHeaders({
+      'Content-Type': 'text/html; charset=utf-8',
+      'Accept-Language': 'pt-BR,pt;q=0.9'
+    });
+    
+    // Carregar HTML na página com encoding UTF-8
+    await page.setContent(htmlContent, { 
+      waitUntil: 'networkidle0'
+    });
 
     // Aguardar ApexCharts carregar completamente
     await page.waitForFunction(() => {
@@ -112,6 +155,19 @@ exports.gerarPDFRelatorio = functions.https.onCall(async (data, context) => {
       });
     });
     
+    // Injetar data atualizada no footer ANTES de gerar PDF
+    const dataAtualFooter = new Date().toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+    await page.evaluate((data) => {
+      const footerData = document.getElementById('data-footer');
+      if (footerData) {
+        footerData.textContent = data;
+      }
+    }, dataAtualFooter);
+
     // Aguardar um pouco mais para garantir que tudo está estável
     await page.waitForTimeout(1000);
 
@@ -128,8 +184,8 @@ exports.gerarPDFRelatorio = functions.https.onCall(async (data, context) => {
         left: '15mm'
       },
       displayHeaderFooter: true,
-      headerTemplate: '<div style="font-size: 10px; color: #6b7280; width: 100%; text-align: center; padding: 10px; font-family: -apple-system, BlinkMacSystemFont, sans-serif;">APP 5D Therapists - Relatório Confidencial</div>',
-      footerTemplate: '<div style="font-size: 9px; color: #6b7280; width: 100%; text-align: center; padding: 10px; font-family: -apple-system, BlinkMacSystemFont, sans-serif;">Página <span class="pageNumber"></span> de <span class="totalPages"></span> - ' + dataAtual + '</div>'
+      headerTemplate: '<div style="font-size: 10px; color: #6b7280; width: 100%; text-align: center; padding: 10px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; text-rendering: optimizeLegibility;">APP 5D Therapists - Relatório Confidencial</div>',
+      footerTemplate: '<div style="font-size: 9px; color: #6b7280; width: 100%; text-align: center; padding: 10px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; text-rendering: optimizeLegibility;">Página <span class="pageNumber"></span> de <span class="totalPages"></span> - <span id="data-footer"></span></div>'
     });
 
     await browser.close();
@@ -158,7 +214,25 @@ exports.gerarPDFRelatorio = functions.https.onCall(async (data, context) => {
  * Gera HTML completo do relatório com gráficos renderizados
  */
 function generateHTMLReport(data) {
-  const { pacienteNome, analise, terapeutaNome, sessoes = [], terapias = {} } = data;
+  // Deserializar e validar dados recebidos
+  let pacienteNome = data.pacienteNome || '';
+  let terapeutaNome = data.terapeutaNome || 'Terapeuta';
+  let analise = data.analise || {};
+  let sessoes = Array.isArray(data.sessoes) ? data.sessoes : [];
+  let terapias = data.terapias || {};
+  
+  // Garantir que strings sejam UTF-8 válidas ANTES de qualquer processamento
+  if (typeof pacienteNome !== 'string') pacienteNome = String(pacienteNome || '');
+  if (typeof terapeutaNome !== 'string') terapeutaNome = String(terapeutaNome || 'Terapeuta');
+  
+  // Log para debug (apenas em desenvolvimento)
+  console.log('📝 Dados recebidos:', {
+    pacienteNome: pacienteNome.substring(0, 50),
+    terapeutaNome: terapeutaNome.substring(0, 50),
+    hasAnalise: !!analise,
+    sessoesCount: sessoes.length
+  });
+  
   const dataAtual = new Date().toLocaleDateString('pt-BR', {
     day: '2-digit',
     month: '2-digit',
@@ -184,19 +258,62 @@ function generateHTMLReport(data) {
     };
   }).filter(s => s.resultadosNumericos.length > 0);
 
-  // Sanitizar nomes para evitar problemas de encoding
+  // Sanitizar e normalizar texto para evitar problemas de encoding
+  // IMPORTANTE: Preservar acentos e caracteres especiais corretamente
   const sanitizeText = (text) => {
-    if (!text) return '';
-    return String(text)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
+    if (text === null || text === undefined) return '';
+    if (typeof text === 'number') return String(text);
+    
+    try {
+      // Converter para string
+      let str = String(text);
+      
+      // Remover caracteres de controle inválidos (exceto quebras de linha \n e tabs \t)
+      str = str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+      
+      // Normalizar para NFC (Canonical Decomposition, followed by Canonical Composition)
+      // Isso garante que acentos e caracteres especiais sejam representados corretamente
+      // NFC é o formato mais comum e compatível
+      if (str.normalize) {
+        str = str.normalize('NFC');
+      }
+      
+      // NÃO remover caracteres UTF-8 válidos (acentos, emojis, etc)
+      // Apenas escapar caracteres HTML perigosos
+      str = str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+      
+      return str;
+    } catch (error) {
+      console.error('❌ Erro ao sanitizar texto:', error);
+      console.error('📋 Texto original:', text, 'Tipo:', typeof text);
+      // Fallback: tentar converter de forma segura
+      try {
+        return Buffer.from(String(text), 'utf8').toString('utf8').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      } catch (e) {
+        return '[Texto inválido]';
+      }
+    }
+  };
+  
+  // Normalizar nomes ANTES de qualquer processamento
+  pacienteNome = sanitizeText(pacienteNome);
+  terapeutaNome = sanitizeText(terapeutaNome || 'Terapeuta');
+  
+  // Função adicional para sanitizar campos de análise que podem ter texto mais complexo
+  const sanitizeAnalysisField = (field) => {
+    if (!field) return '';
+    if (typeof field === 'number') return field.toString();
+    return sanitizeText(String(field));
   };
 
-  const pacienteNomeSafe = sanitizeText(pacienteNome);
-  const terapeutaNomeSafe = sanitizeText(terapeutaNome);
+  // Garantir que os nomes estejam limpos e normalizados ANTES de usar
+  const pacienteNomeSafe = sanitizeText(pacienteNome || '');
+  const terapeutaNomeSafe = sanitizeText(terapeutaNome || 'Terapeuta');
 
   return `
 <!DOCTYPE html>
@@ -222,6 +339,9 @@ function generateHTMLReport(data) {
             padding: 20px;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
+            text-rendering: optimizeLegibility;
+            font-feature-settings: "kern" 1;
+            font-kerning: normal;
         }
         
         .container {
@@ -514,9 +634,9 @@ function generateHTMLReport(data) {
             <h1>✨ RELATÓRIO QUÂNTICO</h1>
             <h2>Análise Profunda de Evolução Terapêutica</h2>
             <div class="info">
-                <div><strong>Paciente:</strong> ${pacienteNomeSafe}</div>
-                <div><strong>Terapeuta:</strong> ${terapeutaNomeSafe || 'Terapeuta'}</div>
-                <div><strong>Data:</strong> ${dataAtual}</div>
+                <div style="font-size: 16px; margin: 10px 0;"><strong>Paciente:</strong> <span style="font-weight: 500;">${pacienteNomeSafe}</span></div>
+                <div style="font-size: 16px; margin: 10px 0;"><strong>Terapeuta:</strong> <span style="font-weight: 500;">${terapeutaNomeSafe}</span></div>
+                <div style="font-size: 16px; margin: 10px 0;"><strong>Data:</strong> <span style="font-weight: 500;">${dataAtual}</span></div>
             </div>
         </div>
         
@@ -526,7 +646,7 @@ function generateHTMLReport(data) {
             <div class="score-geral">
                 <div class="score-label">Score Geral de Evolução</div>
                 <div class="score-numero">${analise.scoreGeral}/100</div>
-                <div class="score-label">${getScoreLabelFromScore(analise.scoreGeral)}</div>
+                <div class="score-label">${sanitizeText(getScoreLabelFromScore(analise.scoreGeral))}</div>
             </div>
         </div>
         ` : ''}
@@ -543,7 +663,7 @@ function generateHTMLReport(data) {
                 </div>
                 <div class="campo-card">
                     <div class="campo-nome">Velocidade de Melhoria</div>
-                    <div class="campo-valor" style="font-size: 24px;">${analise.velocidadeMelhoria || 'Moderada'}</div>
+                    <div class="campo-valor" style="font-size: 24px;">${sanitizeText(analise.velocidadeMelhoria || 'Moderada')}</div>
                     <div class="campo-status">Progressão identificada</div>
                 </div>
                 ${analise.camposCriticos && analise.camposCriticos.length > 0 ? `
@@ -572,9 +692,9 @@ function generateHTMLReport(data) {
                   
                   return `
                     <div class="campo-card">
-                        <div class="campo-nome">${campo.length > 25 ? campo.substring(0, 25) + '...' : campo}</div>
+                        <div class="campo-nome">${sanitizeText(campo.length > 25 ? campo.substring(0, 25) + '...' : campo)}</div>
                         <div class="campo-valor" style="color: ${statusColor};">${valor.toFixed(1)}/10</div>
-                        <div class="campo-status">${statusText}</div>
+                        <div class="campo-status">${sanitizeText(statusText)}</div>
                         <div class="barra-progresso">
                             <div class="barra-progresso-fill" style="width: ${percentual}%; background: ${statusColor};"></div>
                         </div>
@@ -596,8 +716,13 @@ function generateHTMLReport(data) {
                 year: 'numeric'
               });
               
-              const labelsArray = sessao.resultadosNumericos.map(r => r.label);
-              const valoresArray = sessao.resultadosNumericos.map(r => r.valor);
+              // Sanitizar labels e garantir que todos os textos estejam corretos
+              const labelsArray = sessao.resultadosNumericos.map(r => sanitizeText(r.label));
+              const valoresArray = sessao.resultadosNumericos.map(r => parseFloat(r.valor) || 0);
+              
+              // Sanitizar nome da terapia e data
+              const terapiaNomeSafe = sanitizeText(sessao.terapiaNome || 'Terapia');
+              const dataFormatadaSafe = sanitizeText(dataFormatada);
               const coresArray = valoresArray.map(v => {
                 if (v >= 7) return '#10b981';
                 if (v >= 5) return '#f59e0b';
@@ -616,13 +741,23 @@ function generateHTMLReport(data) {
                     toolbar: { show: false },
                     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
                   },
+                  title: {
+                    text: 'Avaliação da Sessão',
+                    style: { fontSize: '16px', fontWeight: 'bold', fontFamily: 'inherit' }
+                  },
                   series: [{ 
                     name: 'Avaliação', 
                     data: valoresArray 
                   }],
                   xaxis: { 
                     categories: labelsArray,
-                    labels: { style: { fontSize: '12px', fontFamily: 'inherit' } }
+                    labels: { 
+                      style: { 
+                        fontSize: '12px', 
+                        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                        fontWeight: 500
+                      } 
+                    }
                   },
                   yaxis: { 
                     min: 0, 
@@ -697,12 +832,12 @@ function generateHTMLReport(data) {
               return `
                 <div class="sessao-card">
                     <div class="sessao-header">
-                        <div class="sessao-titulo">${sessao.terapiaNome}</div>
-                        <div class="sessao-data">${dataFormatada}</div>
+                        <div class="sessao-titulo">${terapiaNomeSafe}</div>
+                        <div class="sessao-data">${dataFormatadaSafe}</div>
                     </div>
                     
                     <div class="grafico-container">
-                        <div class="grafico-titulo">Avaliação - ${sessao.terapiaNome}</div>
+                        <div class="grafico-titulo">Avaliação - ${terapiaNomeSafe}</div>
                         <div id="${chartId}"></div>
                     </div>
                     
