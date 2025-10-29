@@ -311,9 +311,9 @@ function generateHTMLReport(data) {
     return sanitizeText(String(field));
   };
 
-  // Garantir que os nomes estejam limpos e normalizados ANTES de usar
-  const pacienteNomeSafe = sanitizeText(pacienteNome || '');
-  const terapeutaNomeSafe = sanitizeText(terapeutaNome || 'Terapeuta');
+  // Os nomes já foram sanitizados acima
+  const pacienteNomeSafe = pacienteNome;
+  const terapeutaNomeSafe = terapeutaNome;
 
   return `
 <!DOCTYPE html>
@@ -655,6 +655,13 @@ function generateHTMLReport(data) {
         ${analise ? `
         <div class="secao">
             <div class="secao-titulo">📊 Resumo Executivo</div>
+            <div style="background: #f9fafb; border-left: 4px solid #8B5CF6; padding: 15px; margin-bottom: 20px; border-radius: 4px;">
+                <p style="color: #4b5563; font-size: 14px; line-height: 1.8; margin: 0;">
+                    Este resumo apresenta os principais indicadores da evolução terapêutica do paciente, 
+                    oferecendo uma visão consolidada do progresso geral e aspectos que requerem atenção. 
+                    Utilize estas informações para orientar o planejamento das próximas sessões e ajustar o protocolo terapêutico conforme necessário.
+                </p>
+            </div>
             <div class="campos-grid">
                 <div class="campo-card">
                     <div class="campo-nome">Total de Sessões</div>
@@ -681,6 +688,14 @@ function generateHTMLReport(data) {
         ${analise && analise.indicesPorCampo ? `
         <div class="secao">
             <div class="secao-titulo">📊 Análise Detalhada por Campo Energético</div>
+            <div style="background: #f0f9ff; border-left: 4px solid #3b82f6; padding: 15px; margin-bottom: 20px; border-radius: 4px;">
+                <p style="color: #1e40af; font-size: 14px; line-height: 1.8; margin: 0;">
+                    <strong>Como interpretar esta análise:</strong> Cada campo energético representa uma dimensão específica do bem-estar holístico do paciente. 
+                    Os valores são calculados com base nas avaliações realizadas durante as sessões terapêuticas, considerando uma escala de 0 a 10. 
+                    Campos com valores acima de 7/10 indicam excelente estado, entre 5-7 sugerem bom estado com espaço para melhoria, entre 3-5 apontam necessidade de atenção, 
+                    e abaixo de 3 requerem intervenção urgente. Esta análise detalhada permite identificar precisamente quais áreas precisam de trabalho prioritário nas próximas sessões.
+                </p>
+            </div>
             <div class="campos-grid">
                 ${Object.entries(analise.indicesPorCampo).slice(0, 9).map(([campo, dados]) => {
                   const valor = parseFloat(dados.atual) || 0;
@@ -873,7 +888,15 @@ function generateHTMLReport(data) {
         <!-- TABELA RESUMO DE SESSÕES -->
         ${sessoes.length > 0 ? `
         <div class="secao">
-            <div class="secao-titulo">📋 Resumo das Sessões</div>
+            <div class="secao-titulo">📋 Histórico de Sessões</div>
+            <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin-bottom: 20px; border-radius: 4px;">
+                <p style="color: #78350f; font-size: 14px; line-height: 1.8; margin: 0;">
+                    <strong>Análise do Histórico:</strong> Esta tabela apresenta um resumo das sessões realizadas, permitindo identificar padrões de evolução ao longo do tempo. 
+                    A coluna "Média" indica a pontuação média de todos os campos avaliados em cada sessão, enquanto os símbolos representam: ✓ (excelente, ≥7), 
+                    ~ (bom, 5-6.9) e ! (atenção necessária, &lt;5). Use esta informação para identificar tendências de melhoria ou estabilização, 
+                    e para ajustar estratégias terapêuticas conforme a resposta do paciente ao trabalho realizado.
+                </p>
+            </div>
             <table class="tabela">
                 <thead>
                     <tr>
@@ -962,45 +985,258 @@ function getStatusText(valor) {
 
 function getRecommendations(analise) {
   if (!analise || !analise.scoreGeral) {
-    return '<p>Realize mais sessões para obter recomendações personalizadas.</p>';
+    return `
+      <div style="padding: 20px; background: #f0f9ff; border-left: 4px solid #3b82f6; border-radius: 4px; margin: 15px 0;">
+        <p style="color: #1e40af; font-size: 15px; line-height: 1.8; margin: 0;">
+          <strong>Orientação Inicial:</strong> Para gerar recomendações personalizadas e detalhadas, é necessário realizar pelo menos 3 sessões terapêuticas com este paciente. 
+          Conforme as sessões forem registradas, o sistema poderá identificar padrões, tendências e áreas específicas que necessitam de atenção, proporcionando orientações cada vez mais precisas e acionáveis.
+        </p>
+      </div>
+    `;
   }
   
   const score = analise.scoreGeral;
+  const camposCriticos = analise.camposCriticos || [];
+  const indicesPorCampo = analise.indicesPorCampo || {};
   let recommendations = '';
   
-  if (score >= 70) {
-    recommendations = `
-      <h3 style="color: #059669; margin-bottom: 10px;">✨ Status: Excelente Evolução</h3>
-      <ul style="margin-left: 20px; line-height: 2;">
-        <li>Manter o ritmo atual de sessões</li>
-        <li>Consolidar resultados obtidos</li>
-        <li>Focar em manutenção preventiva</li>
-        <li>Celebrar conquistas com o paciente</li>
-      </ul>
-    `;
-  } else if (score >= 50) {
-    recommendations = `
-      <h3 style="color: #f59e0b; margin-bottom: 10px;">📊 Status: Boa Progressão</h3>
-      <ul style="margin-left: 20px; line-height: 2;">
-        <li>Intensificar trabalho nos campos críticos</li>
-        <li>Considerar terapias complementares</li>
-        <li>Avaliar frequência das sessões</li>
-        <li>Monitorar evolução nos próximos 30 dias</li>
-      </ul>
-    `;
-  } else {
-    recommendations = `
-      <h3 style="color: #dc2626; margin-bottom: 10px;">⚠️ Status: Atenção Necessária</h3>
-      <ul style="margin-left: 20px; line-height: 2;">
-        <li><strong>URGENTE:</strong> Revisar protocolo terapêutico completo</li>
-        <li>Considerar abordagens complementares</li>
-        <li>Aumentar frequência das sessões</li>
-        <li>Investigar fatores externos impactantes</li>
-        <li>Avaliar necessidade de apoio multidisciplinar</li>
-      </ul>
+  // Determinar status geral
+  let statusInfo = {
+    cor: '#059669',
+    titulo: 'Excelente Evolução',
+    emoji: '✨',
+    descricao: 'O paciente apresenta uma evolução significativa em seus campos energéticos, indicando que o protocolo terapêutico está funcionando de forma muito efetiva.'
+  };
+  
+  if (score < 30) {
+    statusInfo = {
+      cor: '#dc2626',
+      titulo: 'Atenção Necessária Urgente',
+      emoji: '⚠️',
+      descricao: 'A análise indica que há áreas críticas que requerem intervenção imediata. É fundamental revisar completamente a abordagem terapêutica e considerar ajustes significativos no protocolo.'
+    };
+  } else if (score < 50) {
+    statusInfo = {
+      cor: '#ea580c',
+      titulo: 'Atenção Necessária',
+      emoji: '⚠️',
+      descricao: 'Existem diversos campos que necessitam de atenção prioritária. Recomenda-se intensificar o trabalho terapêutico e avaliar a necessidade de abordagens complementares.'
+    };
+  } else if (score < 70) {
+    statusInfo = {
+      cor: '#f59e0b',
+      titulo: 'Boa Progressão',
+      emoji: '📈',
+      descricao: 'O paciente está em uma trajetória positiva, mas ainda existem oportunidades de melhoria. Focar nos campos específicos identificados pode acelerar significativamente o progresso.'
+    };
+  }
+  
+  // Construir seções detalhadas
+  recommendations += `
+    <div style="background: ${statusInfo.cor}15; border-left: 5px solid ${statusInfo.cor}; padding: 20px; margin-bottom: 25px; border-radius: 6px;">
+      <h3 style="color: ${statusInfo.cor}; margin-top: 0; margin-bottom: 12px; font-size: 20px;">
+        ${statusInfo.emoji} Status Geral: ${statusInfo.titulo}
+      </h3>
+      <p style="color: #374151; font-size: 15px; line-height: 1.8; margin-bottom: 15px;">
+        ${statusInfo.descricao} O score geral de <strong>${score}/100</strong> indica que há ${score >= 70 ? 'excelentes' : score >= 50 ? 'boas' : 'importantes'} oportunidades de trabalho terapêutico.
+      </p>
+      <p style="color: #4b5563; font-size: 14px; line-height: 1.7; margin: 0;">
+        <strong>Interpretação do Score:</strong> Valores acima de 70 indicam excelente progresso, entre 50-69 sugerem boa evolução com espaço para melhorias, entre 30-49 apontam necessidade de atenção, e abaixo de 30 requerem intervenção urgente.
+      </p>
+    </div>
+  `;
+  
+  // Seção de Campos Críticos com orientações detalhadas
+  if (camposCriticos.length > 0) {
+    recommendations += `
+      <div style="background: #fef2f2; border: 2px solid #dc2626; padding: 20px; margin-bottom: 25px; border-radius: 6px;">
+        <h3 style="color: #dc2626; margin-top: 0; margin-bottom: 15px; font-size: 18px;">
+          🚨 Campos que Necessitam Atenção Urgente
+        </h3>
+        <p style="color: #7f1d1d; font-size: 14px; line-height: 1.8; margin-bottom: 15px;">
+          Os seguintes campos energéticos apresentam valores críticos (abaixo de 5/10) e requerem atenção prioritária nas próximas sessões:
+        </p>
+        ${camposCriticos.map(campo => {
+          const dadosCampo = indicesPorCampo[campo] || {};
+          const valor = parseFloat(dadosCampo.atual) || 0;
+          const explicacao = getExplicacaoCampo(campo);
+          const orientacoesCampo = getOrientacoesEspecificasCampo(campo, valor);
+          
+          return `
+            <div style="background: white; border-left: 4px solid #dc2626; padding: 15px; margin-bottom: 12px; border-radius: 4px;">
+              <h4 style="color: #dc2626; margin-top: 0; margin-bottom: 8px; font-size: 16px; font-weight: bold;">
+                ${sanitizeText(campo)} - Valor: ${valor.toFixed(1)}/10
+              </h4>
+              <p style="color: #374151; font-size: 14px; line-height: 1.7; margin-bottom: 10px;">
+                <strong>O que significa:</strong> ${explicacao}
+              </p>
+              <div style="background: #fffbeb; padding: 12px; border-radius: 4px; margin-top: 10px;">
+                <p style="color: #78350f; font-size: 14px; line-height: 1.8; margin: 0;">
+                  <strong>Orientações Práticas para Elevar este Campo:</strong><br>
+                  ${orientacoesCampo}
+                </p>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
     `;
   }
   
+  // Recomendações Gerais Baseadas no Score
+  let recomendacoesGerais = '';
+  
+  if (score >= 70) {
+    recomendacoesGerais = `
+      <div style="background: #ecfdf5; border-left: 4px solid #059669; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+        <h4 style="color: #059669; margin-top: 0; margin-bottom: 12px; font-size: 16px;">Estratégias de Consolidação</h4>
+        <ul style="color: #065f46; font-size: 14px; line-height: 2; margin: 0; padding-left: 25px;">
+          <li><strong>Manter Ritmo:</strong> Continue com a frequência atual de sessões, pois está gerando resultados positivos. Recomenda-se manter pelo menos 1-2 sessões semanais.</li>
+          <li><strong>Consolidar Conquistas:</strong> Dedique tempo nas sessões para reforçar os ganhos obtidos. Peça ao paciente que reflita sobre as melhorias percebidas em sua vida diária.</li>
+          <li><strong>Prevenção:</strong> Trabalhe preventivamente nos campos que estão acima de 7/10 mas ainda podem melhorar. Isso cria uma base sólida para sustentar os resultados a longo prazo.</li>
+          <li><strong>Celebrar e Validar:</strong> Reconheça os avanços do paciente explicitamente. Isso reforça o sistema de crenças positivas e aumenta a motivação para continuar o processo.</li>
+          <li><strong>Documentação:</strong> Registre as técnicas e abordagens que estão funcionando bem para replicar em futuros casos similares.</li>
+        </ul>
+      </div>
+    `;
+  } else if (score >= 50) {
+    recomendacoesGerais = `
+      <div style="background: #fffbeb; border-left: 4px solid #f59e0b; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+        <h4 style="color: #92400e; margin-top: 0; margin-bottom: 12px; font-size: 16px;">Estratégias para Acelerar o Progresso</h4>
+        <ul style="color: #78350f; font-size: 14px; line-height: 2; margin: 0; padding-left: 25px;">
+          <li><strong>Foco Intensivo:</strong> Priorize os campos críticos identificados acima. Dedique 60-70% do tempo de cada sessão especificamente para elevar esses campos.</li>
+          <li><strong>Terapias Complementares:</strong> Considere combinar diferentes abordagens terapêuticas. Por exemplo, se o campo Emocional está baixo, pode combinar Reiki com Cristaloterapia e Aromaterapia na mesma sessão.</li>
+          <li><strong>Aumentar Frequência:</strong> Se o paciente vem 1 vez por semana, considere temporariamente aumentar para 2 vezes. Isso pode acelerar significativamente a melhoria nos campos críticos.</li>
+          <li><strong>Trabalho Domiciliar:</strong> Forneça exercícios simples, meditações ou práticas energéticas que o paciente possa fazer entre as sessões. Isso multiplica o efeito do trabalho terapêutico.</li>
+          <li><strong>Avaliar Ambiente:</strong> Converse com o paciente sobre fatores externos que possam estar impactando negativamente os campos energéticos (estresse no trabalho, relacionamentos, alimentação, etc.).</li>
+        </ul>
+      </div>
+    `;
+  } else {
+    recomendacoesGerais = `
+      <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+        <h4 style="color: #991b1b; margin-top: 0; margin-bottom: 12px; font-size: 16px;">Plano de Ação Urgente</h4>
+        <ul style="color: #7f1d1d; font-size: 14px; line-height: 2; margin: 0; padding-left: 25px;">
+          <li><strong>Revisar Protocolo Completo:</strong> É necessário repensar a abordagem atual. Analise quais técnicas estão sendo usadas e considere mudanças significativas. Talvez a terapia escolhida não seja a mais adequada para este caso específico.</li>
+          <li><strong>Anamnese Aprofundada:</strong> Realize uma anamnese mais detalhada para identificar bloqueios profundos, traumas não resolvidos, ou padrões comportamentais que estejam impedindo o progresso.</li>
+          <li><strong>Frequência Urgente:</strong> Recomenda-se aumentar a frequência das sessões para pelo menos 2-3 vezes por semana durante as próximas 4 semanas, ou até que haja melhoria significativa nos campos críticos.</li>
+          <li><strong>Abordagem Multidisciplinar:</strong> Considere encaminhar o paciente para outros profissionais (psicólogo, nutricionista, médico) se identificar questões que estejam fora do escopo da terapia energética.</li>
+          <li><strong>Fatores Externos:</strong> Investigue profundamente fatores da vida do paciente que possam estar causando bloqueios energéticos persistentes: relacionamentos tóxicos, ambiente de trabalho estressante, questões familiares não resolvidas, etc.</li>
+          <li><strong>Técnicas de Limpeza:</strong> Priorize técnicas de limpeza energética profunda nas próximas sessões, antes de trabalhar qualquer outro aspecto. Bloqueios podem estar impedindo que o trabalho terapêutico seja absorvido.</li>
+          <li><strong>Comunicação Direta:</strong> Tenha uma conversa franca com o paciente sobre o progresso e ajuste as expectativas. Às vezes, é necessário mais tempo ou uma abordagem diferente para casos mais complexos.</li>
+        </ul>
+      </div>
+    `;
+  }
+  
+  recommendations += recomendacoesGerais;
+  
+  // Seção de Próximos Passos Específicos
+  recommendations += `
+    <div style="background: #f0f9ff; border: 2px solid #3b82f6; padding: 20px; margin-bottom: 25px; border-radius: 6px;">
+      <h3 style="color: #1e40af; margin-top: 0; margin-bottom: 15px; font-size: 18px;">
+        📋 Próximos Passos Recomendados
+      </h3>
+      <ol style="color: #1e3a8a; font-size: 14px; line-height: 2.2; margin: 0; padding-left: 25px;">
+        <li><strong>Revisar este relatório:</strong> Dedique tempo para analisar todos os dados apresentados e identificar padrões específicos para este paciente.</li>
+        <li><strong>Planejar próxima sessão:</strong> Baseado nos campos críticos identificados, prepare técnicas e abordagens específicas para a próxima sessão.</li>
+        <li><strong>Estabelecer metas:</strong> Em conjunto com o paciente, defina metas realistas e mensuráveis para os próximos 30 dias, focando especialmente nos campos que precisam de atenção.</li>
+        <li><strong>Documentar mudanças:</strong> Nas próximas sessões, registre detalhadamente as respostas do paciente a diferentes técnicas, para identificar o que funciona melhor para ele.</li>
+        <li><strong>Avaliar em 30 dias:</strong> Após aproximadamente 30 dias ou 4-6 sessões, gere um novo relatório para comparar a evolução e ajustar a estratégia conforme necessário.</li>
+        <li><strong>Manter comunicação:</strong> Mantenha diálogo aberto com o paciente sobre seu progresso, sintomas, e como ele está se sentindo entre as sessões. Isso fornece informações valiosas para ajustar o protocolo.</li>
+      </ol>
+    </div>
+  `;
+  
+  // Nota Final
+  recommendations += `
+    <div style="background: #f9fafb; border-left: 4px solid #6b7280; padding: 15px; margin-top: 20px; border-radius: 4px;">
+      <p style="color: #374151; font-size: 13px; line-height: 1.7; margin: 0; font-style: italic;">
+        <strong>Nota Importante:</strong> Este relatório foi gerado com base nos dados das sessões registradas. As recomendações são sugestões baseadas em análises quantitativas, mas devem ser consideradas dentro do contexto único de cada paciente. 
+        Use seu conhecimento clínico e intuição terapêutica para adaptar estas orientações à realidade específica de cada caso. O progresso em terapias energéticas pode ser não-linear, então mantenha paciência e persistência.
+      </p>
+    </div>
+  `;
+  
   return recommendations;
+}
+
+// Função auxiliar para explicações de campos
+function getExplicacaoCampo(campo) {
+  const explicacoes = {
+    'Mental': 'Refere-se ao bem-estar cognitivo, clareza mental, capacidade de concentração e qualidade dos pensamentos. Baixos valores podem indicar sobrecarga mental, confusão ou dificuldades de raciocínio.',
+    'Emocional': 'Relacionado ao equilíbrio das emoções, capacidade de gerenciar sentimentos e estabilidade emocional. Valores baixos sugerem desequilíbrios emocionais, instabilidade ou dificuldade em processar emoções.',
+    'Físico': 'Representa o estado do corpo físico, níveis de energia corporal, vitalidade e bem-estar físico geral. Indicador importante de saúde e disposição física.',
+    'Energético': 'Campo sutil que representa o fluxo de energia vital, chakras e sistema energético como um todo. Crucial para a manutenção da saúde holística.',
+    'Espiritual': 'Conectado ao senso de propósito, conexão com algo maior, sentido de vida e bem-estar espiritual. Importante para qualidade de vida e resiliência.',
+    'Vibracional': 'Indica a qualidade vibracional geral, ressonância e frequência energética. Baixos valores podem indicar necessidade de elevação vibracional.',
+    'Relacional': 'Reflete a qualidade dos relacionamentos e interações sociais. Essencial para bem-estar social e emocional.',
+    'Existencial': 'Relacionado ao sentido de existência, propósito de vida e satisfação existencial. Fundamental para motivação e felicidade.',
+    'Criativo': 'Representa a expressão criativa, capacidade de inovação e manifestação de ideias. Importante para realização pessoal.',
+  };
+  
+  return explicacoes[campo] || `Este campo energético representa um aspecto importante da saúde holística do paciente. Valores baixos (abaixo de 5/10) indicam que esta área necessita atenção prioritária nas próximas sessões terapêuticas.`;
+}
+
+// Função auxiliar para orientações específicas por campo
+function getOrientacoesEspecificasCampo(campo, valor) {
+  const orientacoes = {
+    'Mental': `
+      • Utilize técnicas de limpeza mental como Reiki nos chakras superiores (6º e 7º)<br>
+      • Trabalhe com cristais como Ametista ou Quartzo Branco na testa<br>
+      • Pratique visualizações guiadas para clareza mental<br>
+      • Considere Aromaterapia com óleos essenciais de Alecrim ou Hortelã-pimenta<br>
+      • Oriente o paciente sobre técnicas de respiração para oxigenar o cérebro<br>
+      • Sugira atividades que estimulem a mente de forma positiva (leitura, jogos cognitivos)`
+    ,
+    'Emocional': `
+      • Foque em equilibrar o chakra do Coração (4º chakra) com Reiki ou Cristais<br>
+      • Trabalhe com Essências Florais como Rescue Remedy ou outras específicas ao desequilíbrio<br>
+      • Utilize Aromaterapia com óleos como Lavanda, Camomila ou Rosa<br>
+      • Pratique liberação emocional através de técnicas como ThetaHealing<br>
+      • Oriente sobre técnicas de acolhimento e processamento emocional<br>
+      • Considere investigar bloqueios emocionais mais profundos`
+    ,
+    'Físico': `
+      • Priorize trabalho corporal completo, não apenas pontos específicos<br>
+      • Utilize Cromoterapia com cores que estimulem vitalidade (Vermelho, Laranja)<br>
+      • Trabalhe com cristais de geração como Quartzo Rosa ou Citrino<br>
+      • Oriente sobre hábitos de vida: alimentação, exercício físico, sono<br>
+      • Considere suporte nutricional ou encaminhamento médico se necessário<br>
+      • Pratique Reiki em todo o corpo físico para restaurar energia vital`
+    ,
+    'Energético': `
+      • Realize limpeza energética profunda completa em todos os chakras<br>
+      • Utilize técnicas de alinhamento energético e balanceamento<br>
+      • Trabalhe com geometrias sagradas para estruturar o campo energético<br>
+      • Pratique Radiestesia para identificar desequilíbrios específicos<br>
+      • Oriente sobre proteção energética e manutenção do campo entre sessões<br>
+      • Considere trabalho mais frequente e intensivo para este campo`
+    ,
+    'Espiritual': `
+      • Trabalhe conexão com o propósito e sentido de vida<br>
+      • Utilize práticas meditativas e contemplativas na sessão<br>
+      • Trabalhe com cristais como Ametista, Selenita ou Quartzo Transparente<br>
+      • Explore questões existenciais que possam estar bloqueando<br>
+      • Oriente sobre práticas espirituais pessoais (meditação, oração, etc.)<br>
+      • Considere técnicas de conexão com o divino ou propósito maior`
+    ,
+    'Vibracional': `
+      • Trabalhe elevação vibracional através de frequências sonoras (taças, mantras)<br>
+      • Utilize Cristaloterapia com cristais de alta vibração<br>
+      • Pratique meditação para elevar consciência<br>
+      • Oriente sobre alimentação mais vibracional (menos processados)<br>
+      • Trabalhe com emoções elevadas (gratidão, amor, compaixão)<br>
+      • Considere ambientes e pessoas que elevem a vibração do paciente`
+  };
+  
+  return orientacoes[campo] || `
+    • Dedique tempo extra nas próximas sessões especificamente para este campo<br>
+    • Combine diferentes técnicas terapêuticas que impactem este aspecto<br>
+    • Investigue bloqueios específicos relacionados a este campo<br>
+    • Oriente o paciente sobre práticas que pode fazer em casa para melhorar este campo<br>
+    • Monitore o progresso deste campo especificamente nas próximas sessões<br>
+    • Considere aumentar a frequência das sessões se o campo não melhorar rapidamente
+  `;
 }
 
