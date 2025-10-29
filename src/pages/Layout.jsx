@@ -40,16 +40,16 @@ const SidebarContent = ({ user, onLogout }) => {
     return (
         <div className="flex flex-col h-full">
             <div className="flex items-center gap-3 p-6 border-b border-gray-200">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                    <Sparkles className="w-6 h-6 text-white" />
+                <div className="w-16 h-16 md:w-20 md:h-20 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                    <Sparkles className="w-8 h-8 md:w-10 md:h-10 text-white" />
                 </div>
                 <div>
-                    <h1 className="text-xl font-bold text-slate-900">5D Therapists</h1>
-                    <p className="text-xs text-gray-500">Terapias Quânticas</p>
+                    <h1 className="text-2xl md:text-3xl font-bold text-slate-900">5D Therapists</h1>
+                    <p className="text-sm md:text-base text-gray-500">Terapias Quânticas</p>
                 </div>
             </div>
 
-            <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+            <nav className="flex-1 p-6 space-y-2 overflow-y-auto">
                 {navItems.map((item) => {
                     const Icon = item.icon;
                     const isActive = location.pathname === createPageUrl(item.page);
@@ -58,35 +58,35 @@ const SidebarContent = ({ user, onLogout }) => {
                         <Link
                             key={item.page}
                             to={createPageUrl(item.page)}
-                            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+                            className={`flex items-center gap-4 px-5 py-4 rounded-lg transition-all ${
                                 isActive
                                     ? 'bg-purple-50 text-purple-700'
                                     : 'text-gray-700 hover:bg-gray-50'
                             }`}
                         >
-                            <Icon className={`w-5 h-5 ${isActive ? item.color : 'text-gray-400'}`} />
-                            <span className="font-medium">{item.name}</span>
+                            <Icon className={`w-6 h-6 md:w-7 md:h-7 ${isActive ? item.color : 'text-gray-400'}`} />
+                            <span className="font-medium text-base md:text-lg">{item.name}</span>
                         </Link>
                     );
                 })}
             </nav>
 
-            <div className="p-4 border-t border-gray-200">
+            <div className="p-6 border-t border-gray-200">
                 <Link
                     to={createPageUrl('MinhaConta')}
                     className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors"
                 >
-                    <Avatar className="h-10 w-10">
+                    <Avatar className="h-14 w-14 md:h-16 md:w-16">
                         <AvatarImage src={user?.profile_picture_url} />
-                        <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white">
+                        <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white text-lg md:text-xl font-bold">
                             {getInitials(user?.full_name)}
                         </AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">
+                        <p className="text-base md:text-lg font-semibold text-gray-900 truncate">
                             {user?.full_name || 'Usuário'}
                         </p>
-                        <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                        <p className="text-sm md:text-base text-gray-500 truncate">{user?.email}</p>
                     </div>
                 </Link>
                 <Button
@@ -215,7 +215,7 @@ export default function Layout({ children, currentPageName }) {
 
     return (
         <div className="flex h-screen bg-gray-50">
-            <aside className="hidden lg:block w-64 bg-white border-r border-gray-200">
+            <aside className="hidden lg:block w-72 md:w-80 bg-white border-r border-gray-200">
                 <SidebarContent user={user} onLogout={handleLogout} />
             </aside>
 
@@ -241,7 +241,7 @@ export default function Layout({ children, currentPageName }) {
                     </div>
                 </header>
 
-                <main className="flex-1 overflow-y-auto p-6">
+                <main className="flex-1 overflow-y-auto p-8 md:p-10">
                     <div className="max-w-7xl mx-auto">
                         {children}
                     </div>

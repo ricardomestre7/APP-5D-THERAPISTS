@@ -98,11 +98,11 @@ export default function Dashboard() {
                         animate={{ rotate: [0, 360] }}
                         transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
                     >
-                        <Sparkles className="w-10 h-10 text-purple-600" />
+                        <Sparkles className="w-12 h-12 md:w-16 md:h-16 text-purple-600" />
                     </motion.div>
                     <div>
-                        <h1 className="text-4xl font-bold text-slate-900">Painel 5D</h1>
-                        <p className="text-base text-gray-600">Bem-vindo(a) de volta à sua jornada quântica.</p>
+                        <h1 className="text-5xl md:text-6xl font-bold text-slate-900">Painel 5D</h1>
+                        <p className="text-lg md:text-xl text-gray-600 mt-2">Bem-vindo(a) de volta à sua jornada quântica.</p>
                     </div>
                 </div>
                 {stats.sessoes > 0 && (
@@ -113,35 +113,35 @@ export default function Dashboard() {
                         className="flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-200 rounded-lg text-green-700"
                     >
                         <TrendingUp className="w-5 h-5" />
-                        <span className="text-sm font-medium">Ótimo progresso! Continue assim! 🎉</span>
+                        <span className="text-base md:text-lg font-medium">Ótimo progresso! Continue assim! 🎉</span>
                     </motion.div>
                 )}
             </motion.div>
             
             {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
                 <motion.div
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.5, delay: 0.1 }}
                 >
                     <Card className="bg-gradient-to-br from-purple-50 to-purple-100/50 border-0 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105">
-                        <CardHeader className="flex flex-row items-center justify-between pb-2">
+                        <CardHeader className="flex flex-row items-center justify-between pb-4 p-6">
                             <div>
-                                <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Pacientes Ativos</p>
-                                <CardTitle className="text-4xl font-bold text-slate-900 mt-1">
+                                <p className="text-sm md:text-base font-semibold text-purple-700 uppercase tracking-wide">Pacientes Ativos</p>
+                                <CardTitle className="text-5xl md:text-6xl font-bold text-slate-900 mt-2">
                                     {isLoading ? '...' : stats.pacientes}
                                 </CardTitle>
-                                <p className="text-xs text-gray-600 mt-1">
+                                <p className="text-sm md:text-base text-gray-600 mt-2">
                                     {stats.pacientes === 0 ? 'Nenhum cadastrado' : 'prontuários ativos'}
                                 </p>
                             </div>
                             <motion.div 
-                                className="w-14 h-14 rounded-xl bg-white flex items-center justify-center shadow-lg"
+                                className="w-16 h-16 md:w-20 md:h-20 rounded-xl bg-white flex items-center justify-center shadow-lg"
                                 animate={{ rotate: [0, 10, -10, 0] }}
                                 transition={{ duration: 3, repeat: Infinity }}
                             >
-                                <Users className="w-7 h-7 text-purple-600" />
+                                <Users className="w-8 h-8 md:w-10 md:h-10 text-purple-600" />
                             </motion.div>
                         </CardHeader>
                     </Card>
@@ -153,20 +153,20 @@ export default function Dashboard() {
                     transition={{ duration: 0.5, delay: 0.2 }}
                 >
                     <Card className="bg-gradient-to-br from-green-50 to-green-100/50 border-0 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105">
-                        <CardHeader className="flex flex-row items-center justify-between pb-2">
+                        <CardHeader className="flex flex-row items-center justify-between pb-4 p-6">
                             <div>
-                                <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">Terapias Disponíveis</p>
-                                <CardTitle className="text-4xl font-bold text-slate-900 mt-1">
+                                <p className="text-sm md:text-base font-semibold text-green-700 uppercase tracking-wide">Terapias Disponíveis</p>
+                                <CardTitle className="text-5xl md:text-6xl font-bold text-slate-900 mt-2">
                                     {isLoading ? '...' : stats.terapias}
                                 </CardTitle>
-                                <p className="text-xs text-gray-600 mt-1">técnicas pré-configuradas</p>
+                                <p className="text-sm md:text-base text-gray-600 mt-2">técnicas pré-configuradas</p>
                             </div>
                             <motion.div 
-                                className="w-14 h-14 rounded-xl bg-white flex items-center justify-center shadow-lg"
+                                className="w-16 h-16 md:w-20 md:h-20 rounded-xl bg-white flex items-center justify-center shadow-lg"
                                 animate={{ rotate: [0, -10, 10, 0] }}
                                 transition={{ duration: 3, repeat: Infinity }}
                             >
-                                <Sparkles className="w-7 h-7 text-green-600" />
+                                <Sparkles className="w-8 h-8 md:w-10 md:h-10 text-green-600" />
                             </motion.div>
                         </CardHeader>
                     </Card>
@@ -178,22 +178,22 @@ export default function Dashboard() {
                     transition={{ duration: 0.5, delay: 0.3 }}
                 >
                     <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 border-0 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105">
-                        <CardHeader className="flex flex-row items-center justify-between pb-2">
+                        <CardHeader className="flex flex-row items-center justify-between pb-4 p-6">
                             <div>
-                                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Sessões Realizadas</p>
-                                <CardTitle className="text-4xl font-bold text-slate-900 mt-1">
+                                <p className="text-sm md:text-base font-semibold text-blue-700 uppercase tracking-wide">Sessões Realizadas</p>
+                                <CardTitle className="text-5xl md:text-6xl font-bold text-slate-900 mt-2">
                                     {isLoading ? '...' : stats.sessoes}
                                 </CardTitle>
-                                <p className="text-xs text-gray-600 mt-1">
+                                <p className="text-sm md:text-base text-gray-600 mt-2">
                                     {stats.sessoes === 0 ? 'Nenhuma registrada' : 'atendimentos documentados'}
                                 </p>
                             </div>
                             <motion.div 
-                                className="w-14 h-14 rounded-xl bg-white flex items-center justify-center shadow-lg"
+                                className="w-16 h-16 md:w-20 md:h-20 rounded-xl bg-white flex items-center justify-center shadow-lg"
                                 animate={{ rotate: 360 }}
                                 transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
                             >
-                                <Activity className="w-7 h-7 text-blue-600" />
+                                <Activity className="w-8 h-8 md:w-10 md:h-10 text-blue-600" />
                             </motion.div>
                         </CardHeader>
                     </Card>
@@ -214,13 +214,13 @@ export default function Dashboard() {
                     >
                         <BookOpen className="w-5 h-5 text-green-600" />
                     </motion.div>
-                    <h2 className="text-2xl font-bold text-slate-900">Como Usar o APP 5D</h2>
+                    <h2 className="text-3xl md:text-4xl font-bold text-slate-900">Como Usar o APP 5D</h2>
                 </div>
-                <p className="text-base text-gray-600 mb-6">
+                <p className="text-lg md:text-xl text-gray-600 mb-8">
                     Siga este guia passo a passo para aproveitar todas as funcionalidades do sistema de gestão quântica.
                 </p>
                 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {guides.map((guide, index) => {
                         const Icon = guide.icon;
                         return (
@@ -233,24 +233,24 @@ export default function Dashboard() {
                                 whileTap={{ scale: 0.98 }}
                             >
                                 <Card className="bg-white border-0 shadow-xl hover:shadow-2xl transition-all group cursor-pointer">
-                                    <CardHeader>
+                                    <CardHeader className="p-6">
                                         <div className="flex items-start justify-between">
-                                            <div className="flex items-start gap-3">
-                                                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
-                                                    <Icon className={`w-5 h-5 ${guide.iconColor}`} />
+                                            <div className="flex items-start gap-4">
+                                                <div className="w-14 h-14 md:w-16 md:h-16 rounded-lg bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+                                                    <Icon className={`w-7 h-7 md:w-8 md:h-8 ${guide.iconColor}`} />
                                                 </div>
                                                 <div className="flex-1">
-                                                    <CardTitle className="text-lg font-bold text-slate-900 mb-2">
+                                                    <CardTitle className="text-xl md:text-2xl font-bold text-slate-900 mb-3">
                                                         {guide.title}
                                                     </CardTitle>
-                                                    <p className="text-sm text-gray-600">
+                                                    <p className="text-base md:text-lg text-gray-600">
                                                         {guide.description}
                                                     </p>
                                                 </div>
                                             </div>
                                             <Link to={createPageUrl(guide.linkTo)}>
-                                                <Button variant="ghost" size="icon" className="w-8 h-8 text-gray-400 hover:text-purple-600 hover:bg-purple-50 group-hover:translate-x-1 transition-transform">
-                                                    <ChevronRight className="w-4 h-4" />
+                                                <Button variant="ghost" size="icon" className="w-10 h-10 md:w-12 md:h-12 text-gray-400 hover:text-purple-600 hover:bg-purple-50 group-hover:translate-x-1 transition-transform">
+                                                    <ChevronRight className="w-5 h-5 md:w-6 md:h-6" />
                                                 </Button>
                                             </Link>
                                         </div>
