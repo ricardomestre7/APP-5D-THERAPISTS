@@ -1,9 +1,37 @@
 import { jsPDF } from 'jspdf';
+import { gerarRelatorioPDF as gerarPDFBackend } from '@/api/functions';
 
 /**
- * Gera um PDF profissional do relatório quântico com gráficos e informações detalhadas
+ * Gera um PDF profissional do relatório quântico
+ * Tenta usar Puppeteer (backend) primeiro, fallback para jsPDF (frontend)
  */
-export async function gerarPDFRelatorio({ pacienteNome, analise, terapeutaNome, sessoes = [] }) {
+export async function gerarPDFRelatorio({ pacienteNome, analise, terapeutaNome, sessoes = [], terapias = {} }) {
+    // Tentar primeiro com Puppeteer no backend (alta qualidade)
+    try {
+        console.log('🔄 Tentando gerar PDF via Puppeteer (backend)...');
+        await gerarPDFBackend({
+            pacienteNome,
+            analise,
+            terapeutaNome,
+            sessoes,
+            terapias
+        });
+        console.log('✅ PDF gerado com sucesso via Puppeteer!');
+        return; // Sucesso, sair da função
+    } catch (error) {
+        console.warn('⚠️ Falha ao gerar PDF via Puppeteer, usando fallback jsPDF:', error);
+        // Continuar para fallback jsPDF
+    }
+    
+    // FALLBACK: Usar jsPDF local (qualidade limitada mas funciona)
+    console.log('🔄 Gerando PDF localmente com jsPDF (fallback)...');
+    gerarPDFLocal({ pacienteNome, analise, terapeutaNome, sessoes });
+}
+
+/**
+ * Geração local com jsPDF (fallback quando Puppeteer não disponível)
+ */
+function gerarPDFLocal({ pacienteNome, analise, terapeutaNome, sessoes = [] }) {
     const doc = new jsPDF();
     let y = 20;
     const margemEsquerda = 20;

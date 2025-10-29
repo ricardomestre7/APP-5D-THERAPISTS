@@ -25,6 +25,8 @@ import { db } from './firebase';
 export const createDocument = async (collectionName, data, docId = null) => {
     try {
         console.log(`📝 Criando documento em "${collectionName}":`, data);
+        console.log(`📋 Dados a serem salvos:`, JSON.stringify(data, null, 2));
+        
         if (docId) {
             // Criar com ID específico
             const docRef = doc(db, collectionName, docId);
@@ -37,16 +39,26 @@ export const createDocument = async (collectionName, data, docId = null) => {
             return { id: docId, ...data };
         } else {
             // Criar com ID automático
+            console.log(`🔄 Chamando addDoc para criar documento...`);
             const docRef = await addDoc(collection(db, collectionName), {
                 ...data,
                 created_at: serverTimestamp(),
                 updated_at: serverTimestamp()
             });
             console.log(`✅ Documento criado com ID automático: ${docRef.id}`);
+            console.log(`📋 Documento completo:`, { id: docRef.id, ...data });
             return { id: docRef.id, ...data };
         }
     } catch (error) {
         console.error('❌ Erro ao criar documento:', error);
+        console.error('📋 Detalhes do erro:', {
+            code: error.code,
+            message: error.message,
+            collectionName,
+            hasTerapeutaId: !!data.terapeuta_id,
+            terapeutaId: data.terapeuta_id,
+            stack: error.stack
+        });
         throw error;
     }
 };

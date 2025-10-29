@@ -48,3 +48,13 @@ Thumbs.db
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+*.cache
+
+# Functions (node_modules já está ignorado)
+functions/node_modules

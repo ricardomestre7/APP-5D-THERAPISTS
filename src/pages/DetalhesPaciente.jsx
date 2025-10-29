@@ -1,17 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Paciente } from '@/api/entities';
-import { Sessao } from '@/api/entities';
-import { Terapia } from '@/api/entities';
+import { Paciente, Sessao, Terapia, User as UserEntity } from '@/api/entities';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { User, Phone, Cake, FileText, HeartPulse, PlusCircle, Sparkles, ArrowLeft, FileDown, BarChart3, Loader2 } from 'lucide-react';
+import { User, Phone, Cake, FileText, HeartPulse, PlusCircle, ArrowLeft, FileDown, BarChart3, Loader2, Mail } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import SessaoForm from '../components/SessaoForm';
 import { motion, AnimatePresence } from 'framer-motion';
 // Base44 removido
 import { useAnalisadorQuantico } from '../components/AnalisadorQuantico';
+import GraficoSnapshotSessao from '../components/graficos/GraficoSnapshotSessao';
 
 const QuantumCard = ({ children, className, ...props }) => (
     <Card 
@@ -35,6 +34,19 @@ const DetailItem = ({ icon: Icon, label, value }) => (
 const SessaoHistoryItem = ({ sessao, terapia }) => {
     if (!terapia) return null;
 
+    // Preparar dados para gráfico - apenas valores numéricos
+    const resultadosNumericos = Object.entries(sessao.resultados || {})
+        .filter(([key, value]) => {
+            const num = parseFloat(value);
+            return !isNaN(num) && num > 0;
+        })
+        .map(([key, value]) => ({
+            label: key.length > 30 ? key.substring(0, 30) + '...' : key,
+            valor: parseFloat(value)
+        }));
+
+    const temGrafico = resultadosNumericos.length > 0;
+
     return (
         <QuantumCard className="mb-4">
             <CardHeader>
@@ -48,13 +60,34 @@ const SessaoHistoryItem = ({ sessao, terapia }) => {
                     </span>
                 </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-                {Object.entries(sessao.resultados || {}).map(([key, value]) => (
-                    <div key={key} className="text-sm">
-                        <p className="text-gray-500">{key}:</p>
-                        <p className="text-gray-800 font-medium pl-2">{String(value)}</p>
+            <CardContent className="space-y-4">
+                {/* Gráfico Inteligente baseado no tipo de terapia */}
+                {temGrafico && (
+                    <div className="border-t border-gray-200 pt-4 min-h-[450px] w-full">
+                        <GraficoSnapshotSessao
+                            terapia={terapia}
+                            dadosDaSessao={sessao.resultados || {}}
+                        />
                     </div>
-                ))}
+                )}
+
+                {/* Lista de Resultados */}
+                <div className="space-y-3">
+                    {Object.entries(sessao.resultados || {}).map(([key, value]) => {
+                        const valorNum = parseFloat(value);
+                        const ehNumero = !isNaN(valorNum) && valorNum > 0;
+                        
+                        return (
+                            <div key={key} className="text-sm">
+                                <p className="text-gray-500">{key}:</p>
+                                <p className="text-gray-800 font-medium pl-2">
+                                    {ehNumero ? `${String(value)}/10` : String(value)}
+                                </p>
+                            </div>
+                        );
+                    })}
+                </div>
+
                 {sessao.observacoes_gerais && (
                      <div className="text-sm pt-2 border-t border-gray-200">
                         <p className="text-gray-500">Observações Gerais:</p>
@@ -72,22 +105,49 @@ export default function DetalhesPaciente() {
     const [terapias, setTerapias] = useState({});
     const [isLoading, setIsLoading] = useState(true);
     const [isSessaoFormOpen, setIsSessaoFormOpen] = useState(false);
-    const [isConvitePortalOpen, setIsConvitePortalOpen] = useState(false);
     const location = useLocation();
     const pacienteId = new URLSearchParams(location.search).get('id');
     const navigate = useNavigate();
+
+    // Log para debug
+    useEffect(() => {
+        console.log('📍 URL atual:', location.pathname + location.search);
+        console.log('🔍 ID do paciente extraído da URL:', pacienteId);
+    }, [location, pacienteId]);
 
     // Estados para relatórios
     const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
     const fetchData = useCallback(async () => {
-        if (pacienteId) {
-            setIsLoading(true);
+        if (!pacienteId) {
+            console.error('❌ Erro: ID do paciente não fornecido na URL');
+            alert('Erro: ID do paciente não encontrado na URL. Redirecionando...');
+            navigate('/Pacientes');
+            return;
+        }
+
+        console.log('🔄 Carregando dados do paciente:', pacienteId);
+        setIsLoading(true);
+        
+        try {
+            console.log('📋 Buscando dados do paciente, sessões e terapias...');
             const [pacienteData, sessoesData, terapiasData] = await Promise.all([
                 Paciente.get(pacienteId),
                 Sessao.filter({ paciente_id: pacienteId }, '-data_sessao'),
                 Terapia.list()
             ]);
+
+            console.log('✅ Dados carregados:');
+            console.log('- Paciente:', pacienteData ? `Encontrado: ${pacienteData.nome}` : 'NÃO ENCONTRADO');
+            console.log('- Sessões:', sessoesData.length);
+            console.log('- Terapias:', terapiasData.length);
+
+            if (!pacienteData) {
+                console.error('❌ Paciente não encontrado no Firestore');
+                alert(`Erro: Paciente com ID "${pacienteId}" não foi encontrado.\n\nVerifique se o paciente existe e se você tem permissão para acessá-lo.`);
+                navigate('/Pacientes');
+                return;
+            }
 
             setPaciente(pacienteData);
             setSessoes(sessoesData);
@@ -98,9 +158,30 @@ export default function DetalhesPaciente() {
             }, {});
             setTerapias(terapiasMap);
             
+            console.log('✅ Dados configurados com sucesso');
+        } catch (error) {
+            console.error('❌ Erro ao carregar dados do paciente:', error);
+            console.error('📋 Detalhes do erro:', {
+                code: error.code,
+                message: error.message,
+                pacienteId,
+                stack: error.stack
+            });
+            
+            let mensagemErro = 'Erro ao carregar dados do paciente. Tente novamente.';
+            
+            if (error.code === 'permission-denied' || error.message?.includes('permission') || error.message?.includes('Missing or insufficient')) {
+                mensagemErro = '❌ Erro de Permissões no Firestore!\n\nConfigure as regras do Firestore.\n\nVeja: CONFIGURAR_FIRESTORE_RULES.md';
+            } else if (error.message) {
+                mensagemErro = `Erro: ${error.message}`;
+            }
+            
+            alert(mensagemErro);
+            navigate('/Pacientes');
+        } finally {
             setIsLoading(false);
         }
-    }, [pacienteId]);
+    }, [pacienteId, navigate]);
 
     useEffect(() => {
         fetchData();
@@ -131,22 +212,38 @@ export default function DetalhesPaciente() {
         
         setIsGeneratingPDF(true);
         try {
-            // Base44 removido - implementar nova integração
-            console.log('📄 PDF gerado (demo):', paciente.nome);
-            const response = { data: 'demo-pdf-data' };
-
-            const blob = new Blob([response.data], { type: 'application/pdf' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `relatorio_quantico_${paciente.nome.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            a.remove();
+            const { gerarPDFRelatorio } = await import('@/utils/gerarPDF');
+            const user = await UserEntity.me();
+            
+            // Preparar objeto de terapias para o PDF (id -> objeto completo)
+            const terapiasMap = {};
+            terapias.forEach(terapia => {
+                terapiasMap[terapia.id] = terapia;
+            });
+            
+            await gerarPDFRelatorio({
+                pacienteNome: paciente.nome,
+                analise: analise,
+                terapeutaNome: user?.full_name || 'Terapeuta',
+                sessoes: sessoes,
+                terapias: terapiasMap
+            });
         } catch (error) {
             console.error('Erro ao gerar PDF:', error);
-            alert('Erro ao gerar PDF. Tente novamente.');
+            
+            // Mensagem de erro mais detalhada
+            let mensagemErro = 'Erro ao gerar PDF. ';
+            if (error.message?.includes('permission') || error.message?.includes('unauthenticated')) {
+                mensagemErro += 'Verifique sua autenticação.';
+            } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
+                mensagemErro += 'Erro de conexão. Verifique sua internet.';
+            } else if (error.message?.includes('Cloud Function')) {
+                mensagemErro += 'As Cloud Functions podem não estar configuradas. Usando método alternativo...';
+            } else {
+                mensagemErro += 'Tente novamente ou use o botão na página de Relatórios.';
+            }
+            
+            alert(mensagemErro);
         } finally {
             setIsGeneratingPDF(false);
         }
@@ -176,14 +273,6 @@ export default function DetalhesPaciente() {
                 </div>
                 
                 <div className="flex flex-wrap items-center gap-4">
-                    <Button 
-                        onClick={() => setIsConvitePortalOpen(true)}
-                        className="bg-gradient-to-r from-pink-500 to-purple-600 text-white font-semibold flex items-center gap-2 hover:opacity-90"
-                    >
-                        <Sparkles className="w-5 h-5" />
-                        Convidar ao Portal
-                    </Button>
-
                     {sessoes.length > 0 && (
                         <>
                             <Button

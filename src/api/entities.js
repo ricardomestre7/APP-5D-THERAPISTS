@@ -1,87 +1,87 @@
 // Sistema de Pacientes com Firebase Firestore
 import { queryDocuments, createDocument, getDocument, updateDocument, deleteDocument } from './firestoreHelpers';
+import { getCurrentUser, onAuthChange } from './firebaseAuth';
 
 export const Paciente = {
     filter: async (params, order) => {
-        try {
-            const filters = [];
-            
-            // Aplicar filtro se houver terapeuta_id
-            if (params && params.terapeuta_id) {
-                filters.push({ field: 'terapeuta_id', operator: '==', value: params.terapeuta_id });
-            }
-            
-            // Aplicar ordenação
-            const orderByField = order === '-created_date' ? 'created_at' : null;
-            const orderDirection = order === '-created_date' ? 'desc' : 'asc';
-            
-            const pacientes = await queryDocuments('pacientes', filters, orderByField, orderDirection);
-            
-            // Converter timestamps do Firestore para strings ISO
-            return pacientes.map(p => ({
-                ...p,
-                created_date: p.created_at?.toDate?.()?.toISOString() || p.created_date,
-                updated_date: p.updated_at?.toDate?.()?.toISOString() || p.updated_date
-            }));
-        } catch (error) {
-            console.error('Erro ao buscar pacientes no Firebase:', error);
-            console.log('🔄 Usando localStorage como fallback');
-            
-            // Fallback para localStorage se Firebase falhar
-            const savedPatients = localStorage.getItem('5d_pacientes');
-            const todosPacientes = savedPatients ? JSON.parse(savedPatients) : [];
-            
-            // Filtrar por terapeuta_id se especificado
-            if (params && params.terapeuta_id) {
-                return todosPacientes.filter(p => p.terapeuta_id === params.terapeuta_id);
-            }
-            
-            return todosPacientes;
+        // SEMPRE buscar do Firestore - sem fallback silencioso
+        const filters = [];
+        
+        // Aplicar filtro se houver terapeuta_id
+        if (params && params.terapeuta_id) {
+            filters.push({ field: 'terapeuta_id', operator: '==', value: params.terapeuta_id });
         }
+        
+        // Firestore requer índice composto para filtro + ordenação
+        // Vamos buscar sem ordenação e ordenar em memória para evitar necessidade de criar índice
+        const pacientes = await queryDocuments('pacientes', filters, null, 'asc');
+        console.log(`✅ ${pacientes.length} paciente(s) encontrado(s) no Firestore para terapeuta ${params?.terapeuta_id || 'todos'}`);
+        
+        // Converter timestamps do Firestore para strings ISO e ordenar
+        let pacientesProcessados = pacientes.map(p => ({
+            ...p,
+            created_date: p.created_at?.toDate?.()?.toISOString() || p.created_date,
+            updated_date: p.updated_at?.toDate?.()?.toISOString() || p.updated_date
+        }));
+        
+        // Ordenar em memória se necessário
+        if (order === '-created_date') {
+            pacientesProcessados = pacientesProcessados.sort((a, b) => {
+                const dateA = new Date(a.created_date || a.created_at || 0);
+                const dateB = new Date(b.created_date || b.created_at || 0);
+                return dateB.getTime() - dateA.getTime(); // Ordem descendente (mais recente primeiro)
+            });
+        }
+        
+        return pacientesProcessados;
     },
     
     create: async (data) => {
+        // GARANTIR que terapeuta_id está presente
+        if (!data.terapeuta_id) {
+            throw new Error('ERRO: terapeuta_id é obrigatório. Não é possível salvar paciente sem terapeuta associado.');
+        }
+        
+        console.log('💾 Salvando paciente no Firestore (permanente)...');
+        console.log('🔗 Terapeuta ID:', data.terapeuta_id);
+        
+        // SEMPRE criar no Firestore PRIMEIRO - se falhar, erro explícito
+        const paciente = await createDocument('pacientes', data);
+        console.log('✅ Paciente criado PERMANENTEMENTE no Firestore:', paciente.id);
+        console.log('📋 Dados salvos:', { 
+            id: paciente.id, 
+            nome: data.nome, 
+            terapeuta_id: data.terapeuta_id 
+        });
+        
+        // Salvar também no localStorage APENAS como cache local (não é fonte de verdade)
         try {
-            // Criar no Firestore
-            const paciente = await createDocument('pacientes', data);
-            console.log('📝 Paciente criado no Firebase:', paciente);
-            
-            // Também salvar no localStorage como backup
             const savedPatients = localStorage.getItem('5d_pacientes');
             const pacientes = savedPatients ? JSON.parse(savedPatients) : [];
             pacientes.push(paciente);
             localStorage.setItem('5d_pacientes', JSON.stringify(pacientes));
-            console.log('💾 Paciente também salvo no localStorage como backup');
-            
-            return paciente;
-        } catch (error) {
-            console.error('Erro ao criar paciente no Firebase:', error);
-            console.log('🔄 Salvando apenas no localStorage');
-            // Fallback para localStorage
-            const savedPatients = localStorage.getItem('5d_pacientes');
-            const pacientes = savedPatients ? JSON.parse(savedPatients) : [];
-            
-            const newPaciente = {
-                id: `paciente-${Date.now()}`,
-                ...data,
-                created_date: new Date().toISOString(),
-                updated_date: new Date().toISOString()
-            };
-            
-            pacientes.push(newPaciente);
-            localStorage.setItem('5d_pacientes', JSON.stringify(pacientes));
-            console.log('💾 Paciente salvo no localStorage');
-            return newPaciente;
+            console.log('💾 Cache local atualizado (backup secundário)');
+        } catch (localError) {
+            console.warn('⚠️ Erro ao atualizar cache local (não crítico):', localError);
+            // Não falhar se localStorage falhar - Firestore é a fonte de verdade
         }
+        
+        return paciente;
     },
     
     update: async (id, data) => {
+        if (!id) {
+            throw new Error('ERRO: ID do paciente é obrigatório para atualização.');
+        }
+        
+        console.log('💾 Atualizando paciente no Firestore (permanente)...', id);
+        
+        // SEMPRE atualizar no Firestore PRIMEIRO - se falhar, erro explícito
+        await updateDocument('pacientes', id, data);
+        console.log('✅ Paciente atualizado PERMANENTEMENTE no Firestore:', id);
+        
+        // Atualizar cache local (não crítico)
         try {
-            // Atualizar no Firestore
-            const paciente = await updateDocument('pacientes', id, data);
-            console.log('📝 Paciente atualizado no Firebase:', paciente);
-            
-            // Também atualizar no localStorage
             const savedPatients = localStorage.getItem('5d_pacientes');
             if (savedPatients) {
                 const pacientes = JSON.parse(savedPatients);
@@ -90,77 +90,76 @@ export const Paciente = {
                 if (index !== -1) {
                     pacientes[index] = { ...pacientes[index], ...data, updated_date: new Date().toISOString() };
                     localStorage.setItem('5d_pacientes', JSON.stringify(pacientes));
-                    console.log('💾 Paciente também atualizado no localStorage');
+                    console.log('💾 Cache local atualizado (backup secundário)');
                 }
             }
-            
-            return { id, ...data };
-        } catch (error) {
-            console.error('Erro ao atualizar paciente no Firebase:', error);
-            console.log('🔄 Atualizando apenas no localStorage');
-            // Fallback para localStorage
-            const savedPatients = localStorage.getItem('5d_pacientes');
-            const pacientes = JSON.parse(savedPatients);
-            const index = pacientes.findIndex(p => p.id === id);
-            
-            if (index !== -1) {
-                pacientes[index] = { ...pacientes[index], ...data, updated_date: new Date().toISOString() };
-                localStorage.setItem('5d_pacientes', JSON.stringify(pacientes));
-                console.log('💾 Paciente atualizado no localStorage');
-                return pacientes[index];
-            }
-            throw new Error('Paciente não encontrado');
+        } catch (localError) {
+            console.warn('⚠️ Erro ao atualizar cache local (não crítico):', localError);
         }
+        
+        return { id, ...data };
     },
     
     get: async (id) => {
+        if (!id) {
+            throw new Error('ERRO: ID do paciente é obrigatório.');
+        }
+        
+        console.log('🔍 Buscando paciente no Firestore com ID:', id);
+        
         try {
+            // SEMPRE buscar do Firestore - sem fallback
             const paciente = await getDocument('pacientes', id);
-            if (paciente) {
-                return {
-                    ...paciente,
-                    created_date: paciente.created_at?.toDate?.()?.toISOString() || paciente.created_date,
-                    updated_date: paciente.updated_at?.toDate?.()?.toISOString() || paciente.updated_date
-                };
-            }
-            return null;
-        } catch (error) {
-            console.error('Erro ao buscar paciente no Firebase:', error);
-            // Fallback para localStorage
-            const savedPatients = localStorage.getItem('5d_pacientes');
-            if (!savedPatients) return null;
             
-            const pacientes = JSON.parse(savedPatients);
-            return pacientes.find(p => p.id === id) || null;
+            if (!paciente) {
+                console.warn(`⚠️ Paciente ${id} não encontrado no Firestore`);
+                return null;
+            }
+            
+            console.log('✅ Paciente encontrado no Firestore:', {
+                id: paciente.id,
+                nome: paciente.nome,
+                terapeuta_id: paciente.terapeuta_id
+            });
+            
+            return {
+                ...paciente,
+                created_date: paciente.created_at?.toDate?.()?.toISOString() || paciente.created_date,
+                updated_date: paciente.updated_at?.toDate?.()?.toISOString() || paciente.updated_date
+            };
+        } catch (error) {
+            console.error('❌ Erro ao buscar paciente:', error);
+            console.error('📋 Detalhes:', {
+                code: error.code,
+                message: error.message,
+                pacienteId: id
+            });
+            throw error;
         }
     },
     
     delete: async (id) => {
+        if (!id) {
+            throw new Error('ERRO: ID do paciente é obrigatório para exclusão.');
+        }
+        
+        console.log('🗑️ Deletando paciente PERMANENTEMENTE do Firestore:', id);
+        
+        // SEMPRE deletar do Firestore - se falhar, erro explícito
+        await deleteDocument('pacientes', id);
+        console.log('✅ Paciente deletado PERMANENTEMENTE do Firestore:', id);
+        
+        // Deletar do cache local também (não crítico)
         try {
-            await deleteDocument('pacientes', id);
-            console.log('✅ Paciente deletado do Firebase');
-            
-            // Também deletar do localStorage
             const savedPatients = localStorage.getItem('5d_pacientes');
             if (savedPatients) {
                 const pacientes = JSON.parse(savedPatients);
                 const pacientesAtualizados = pacientes.filter(p => p.id !== id);
                 localStorage.setItem('5d_pacientes', JSON.stringify(pacientesAtualizados));
-                console.log('💾 Paciente também deletado do localStorage');
+                console.log('💾 Cache local atualizado (backup secundário)');
             }
-        } catch (error) {
-            console.error('Erro ao deletar paciente:', error);
-            
-            // Fallback: deletar do localStorage mesmo se Firebase falhar
-            const savedPatients = localStorage.getItem('5d_pacientes');
-            if (savedPatients) {
-                const pacientes = JSON.parse(savedPatients);
-                const pacientesAtualizados = pacientes.filter(p => p.id !== id);
-                localStorage.setItem('5d_pacientes', JSON.stringify(pacientesAtualizados));
-                console.log('💾 Paciente deletado do localStorage');
-            }
-            
-            throw error;
+        } catch (localError) {
+            console.warn('⚠️ Erro ao atualizar cache local (não crítico):', localError);
         }
     }
 };
@@ -169,9 +168,10 @@ export const Terapia = {
     list: async () => [
         { 
             id: '1',
-            nome: 'Reiki Usui', 
-            categoria: 'Energético', 
-            nivel_dificuldade: 'Iniciante', 
+            nome: 'Reiki Usui', 
+            categoria: 'Energético',
+            tipo_visualizacao_sugerido: 'radar',
+            nivel_dificuldade: 'Iniciante', 
             duracao_media: '60-90min', 
             descricao: 'Técnica japonesa milenar de canalização de energia universal através da imposição de mãos, promovendo equilíbrio profundo em todos os níveis do ser.', 
             beneficios: ['Redução significativa de estresse e ansiedade', 'Alívio de dores físicas crônicas e agudas', 'Melhora profunda da qualidade do sono', 'Equilíbrio emocional e estabilidade mental', 'Fortalecimento do sistema imunológico', 'Aceleração do processo de cura natural do corpo', 'Aumento da vitalidade e disposição diária', 'Harmonização e ativação dos 7 chakras principais', 'Liberação de bloqueios energéticos ancestrais', 'Conexão com o Eu Superior e propósito de vida'], 
@@ -187,10 +187,11 @@ export const Terapia = {
             ] 
         },
         { 
-            id: '2', 
-            nome: 'Terapia dos Cristais', 
-            categoria: 'Energético', 
-            nivel_dificuldade: 'Intermediário', 
+            id: '2', 
+            nome: 'Terapia dos Cristais', 
+            categoria: 'Energético',
+            tipo_visualizacao_sugerido: 'chakra_bar',
+            nivel_dificuldade: 'Intermediário', 
             duracao_media: '60-90min', 
             descricao: 'Terapia vibracional milenar que utiliza a ressonância energética dos cristais e pedras preciosas para harmonização, cura e expansão da consciência. Cada cristal possui frequência específica que interage com o campo bioenergético humano.', 
             beneficios: ['Harmonização e ativação dos 7 chakras principais', 'Limpeza profunda do campo áurico e energético', 'Proteção energética e fortalecimento da aura', 'Equilíbrio emocional através de frequências vibracionais', 'Amplificação de intenções e processos de manifestação', 'Conexão profunda com a sabedoria da Terra', 'Alívio de dores físicas através de frequências específicas', 'Expansão da consciência e percepção sutil', 'Transmutação de energias densas em luz', 'Ancoragem e aterramento energético'], 
@@ -207,10 +208,11 @@ export const Terapia = {
             ] 
         },
         { 
-            id: '3', 
-            nome: 'Aromaterapia Quântica', 
-            categoria: 'Olfativo', 
-            nivel_dificuldade: 'Intermediário', 
+            id: '3', 
+            nome: 'Aromaterapia Quântica', 
+            categoria: 'Olfativo',
+            tipo_visualizacao_sugerido: 'line',
+            nivel_dificuldade: 'Intermediário', 
             duracao_media: '60-90min', 
             descricao: 'Arte terapêutica ancestral que utiliza a inteligência vibracional dos óleos essenciais puros para harmonização física, emocional, mental e espiritual. Cada essência carrega a frequência da planta mãe, atuando em múltiplos níveis do ser.', 
             beneficios: ['Equilíbrio emocional profundo através do sistema límbico', 'Redução imediata de estresse e ansiedade', 'Melhora da qualidade do sono e relaxamento', 'Fortalecimento do sistema imunológico', 'Alívio de dores de cabeça e enxaquecas', 'Harmonização hormonal natural', 'Elevação do estado vibracional', 'Clareza mental e foco aumentados', 'Transformação de padrões emocionais limitantes', 'Conexão com memórias profundas e cura de traumas'], 
@@ -227,10 +229,11 @@ export const Terapia = {
             ] 
         },
         { 
-            id: '4', 
-            nome: 'Radiestesia Clínica', 
-            categoria: 'Energético', 
-            nivel_dificuldade: 'Intermediário', 
+            id: '4', 
+            nome: 'Radiestesia Clínica', 
+            categoria: 'Energético',
+            tipo_visualizacao_sugerido: 'radar',
+            nivel_dificuldade: 'Intermediário', 
             duracao_media: '45-60min', 
             descricao: 'Avaliação energética e vibracional de alta precisão para identificar desequilíbrios sutis através de instrumentos radiestésicos como pêndulos e varetas. Técnica milenar que permite o terapeuta acessar informações do campo bioenergético do paciente.', 
             beneficios: ['Identificação precisa de desequilíbrios energéticos antes de se manifestarem fisicamente', 'Detecção de bloqueios em chakras e meridianos', 'Avaliação de compatibilidade com alimentos, remédios e terapias', 'Medição de níveis vibracionais do paciente', 'Identificação de causas profundas de sintomas persistentes', 'Orientação para escolha de cristais, florais e essências adequadas', 'Avaliação do campo áurico e suas camadas', 'Detecção de energias densas ou entidades que possam estar influenciando', 'Mensuração do progresso terapêutico de forma objetiva', 'Auxílio na tomada de decisões terapêuticas personalizadas'], 
@@ -249,7 +252,8 @@ export const Terapia = {
         { 
             id: '5',
             nome: 'Florais de Bach', 
-            categoria: 'Emocional', 
+            categoria: 'Emocional',
+            tipo_visualizacao_sugerido: 'area',
             nivel_dificuldade: 'Iniciante', 
             duracao_media: '45-60min', 
             descricao: 'Sistema terapêutico vibracional desenvolvido pelo Dr. Edward Bach nos anos 1930, utilizando 38 essências florais para equilibrar estados emocionais e padrões comportamentais. Cada floral trabalha uma emoção específica, promovendo harmonia mental e emocional profunda.', 
@@ -268,28 +272,28 @@ export const Terapia = {
         },
         {
             id: '6',
-                    
-                        id: '6', 
-                        nome: 'Aromaterapia Energética', 
-                        categoria: 'Emocional', 
-                        nivel_dificuldade: 'Intermediário', 
-                        duracao_media: '45-60min', 
-                        descricao: 'Uso terapêutico avançado de óleos essenciais puros para influenciar estados emocionais, energéticos e vibracionais. Cada óleo possui frequência específica que interage com chakras, sistema límbico e campo bioenergético, promovendo cura em múltiplas dimensões.', 
-                        beneficios: ['Equilíbrio emocional imediato através do olfato', 'Redução de ansiedade e estresse em até 60%', 'Ativação de memórias positivas e cura de traumas', 'Harmonização de chakras através de frequências aromáticas', 'Melhora da qualidade do sono e relaxamento profundo', 'Aumento da vibração energética pessoal', 'Alívio de sintomas de depressão leve', 'Fortalecimento do sistema imunológico', 'Clareza mental e foco aumentados', 'Transformação de padrões emocionais através do olfato'], 
-                        contraindicacoes: 'Gestantes: evitar óleos de canela, cravo, alecrim e sálvia, Epilepsia: evitar óleos estimulantes como alecrim e eucalipto, Hipertensão: evitar óleos estimulantes, Asma: usar com cautela óleos muito intensos, Sempre diluir óleos essenciais - nunca usar puros na pele, Teste de alergia obrigatório antes do uso, Crianças menores de 3 anos: uso restrito e sempre diluído', 
-                        campos_formulario: [
-                            {"label":"Resposta Emocional ao Óleo (Lavanda)","tipo":"escala_1_10","campo_associado":"Emocional","instrucoes_praticas":"COMO AVALIAR: Ofereça tira de papel com lavanda. Observe PRIMEIRA REAÇÃO facial. Pergunte: 'Como se sente ao cheirar (1-10)?'. Anote micro-expressões: relaxamento, tensão, aversão, prazer.","dicas_observacao":"1-3: Aversão, rejeição. 4-6: Neutro. 7-8: Agradável. 9-10: Amor, reconexão. Aversão pode indicar trauma associado."},
-                            {"label":"Nível de Estresse Percebido","tipo":"escala_1_10","campo_associado":"Emocional","instrucoes_praticas":"COMO AVALIAR: Antes da sessão, pergunte: 'Qual seu nível de estresse agora (1-10)?'. Observe tensão muscular, respiração acelerada, inquietação, expressão facial tensa.","dicas_observacao":"1-3: Relaxado. 4-6: Estresse moderado. 7-8: Alto estresse. 9-10: Exaustão, burnout iminente."},
-                            {"label":"Qualidade do Sono (Última Semana)","tipo":"escala_1_10","campo_associado":"Físico","instrucoes_praticas":"COMO AVALIAR: Pergunte detalhes: 'Como foi seu sono nos últimos 7 dias (1-10)?'. Investigue: quantas horas, acordou durante a noite, sonhos, despertar. Olheiras e cansaço visível são indicadores.","dicas_observacao":"1-3: Insônia severa. 4-6: Sono fragmentado. 7-8: Bom sono. 9-10: Sono reparador e profundo."},
-                            {"label":"Vitalidade Energética","tipo":"escala_1_10","campo_associado":"Energético","instrucoes_praticas":"COMO AVALIAR: Pergunte: 'Qual seu nível de energia vital hoje (1-10)?'. Observe postura, voz (forte ou fraca), movimentos (lentos ou vigorosos), brilho nos olhos.","dicas_observacao":"1-3: Exausto, sem energia. 4-6: Energia moderada. 7-8: Boa energia. 9-10: Vitalidade plena, radiante."},
-                            {"label":"Conexão com Memórias Positivas","tipo":"escala_1_10","campo_associado":"Olfativo","instrucoes_praticas":"COMO AVALIAR: Após inalação dos óleos, pergunte: 'Consegue acessar memórias positivas agora (1-10)?'. Observe se o paciente sorri, relaxa, relata lembranças felizes. Aromas ativam memórias límbicas.","dicas_observacao":"1-3: Bloqueio total. 4-6: Algumas memórias. 7-8: Fácil acesso. 9-10: Memórias vívidas e emocionantes."}
-                        ] 
-                    },
-                    { 
-                        id: '7', 
-                        nome: 'Cromoterapia', 
-                        categoria: 'Energético', 
-                        nivel_dificuldade: 'Iniciante', 
+            nome: 'Aromaterapia Energética',
+            categoria: 'Emocional',
+            tipo_visualizacao_sugerido: 'line',
+            nivel_dificuldade: 'Intermediário',
+            duracao_media: '45-60min',
+            descricao: 'Uso terapêutico avançado de óleos essenciais puros para influenciar estados emocionais, energéticos e vibracionais. Cada óleo possui frequência específica que interage com chakras, sistema límbico e campo bioenergético, promovendo cura em múltiplas dimensões.', 
+            beneficios: ['Equilíbrio emocional imediato através do olfato', 'Redução de ansiedade e estresse em até 60%', 'Ativação de memórias positivas e cura de traumas', 'Harmonização de chakras através de frequências aromáticas', 'Melhora da qualidade do sono e relaxamento profundo', 'Aumento da vibração energética pessoal', 'Alívio de sintomas de depressão leve', 'Fortalecimento do sistema imunológico', 'Clareza mental e foco aumentados', 'Transformação de padrões emocionais através do olfato'], 
+            contraindicacoes: 'Gestantes: evitar óleos de canela, cravo, alecrim e sálvia, Epilepsia: evitar óleos estimulantes como alecrim e eucalipto, Hipertensão: evitar óleos estimulantes, Asma: usar com cautela óleos muito intensos, Sempre diluir óleos essenciais - nunca usar puros na pele, Teste de alergia obrigatório antes do uso, Crianças menores de 3 anos: uso restrito e sempre diluído', 
+            campos_formulario: [
+                {"label":"Resposta Emocional ao Óleo (Lavanda)","tipo":"escala_1_10","campo_associado":"Emocional","instrucoes_praticas":"COMO AVALIAR: Ofereça tira de papel com lavanda. Observe PRIMEIRA REAÇÃO facial. Pergunte: 'Como se sente ao cheirar (1-10)?'. Anote micro-expressões: relaxamento, tensão, aversão, prazer.","dicas_observacao":"1-3: Aversão, rejeição. 4-6: Neutro. 7-8: Agradável. 9-10: Amor, reconexão. Aversão pode indicar trauma associado."},
+                {"label":"Nível de Estresse Percebido","tipo":"escala_1_10","campo_associado":"Emocional","instrucoes_praticas":"COMO AVALIAR: Antes da sessão, pergunte: 'Qual seu nível de estresse agora (1-10)?'. Observe tensão muscular, respiração acelerada, inquietação, expressão facial tensa.","dicas_observacao":"1-3: Relaxado. 4-6: Estresse moderado. 7-8: Alto estresse. 9-10: Exaustão, burnout iminente."},
+                {"label":"Qualidade do Sono (Última Semana)","tipo":"escala_1_10","campo_associado":"Físico","instrucoes_praticas":"COMO AVALIAR: Pergunte detalhes: 'Como foi seu sono nos últimos 7 dias (1-10)?'. Investigue: quantas horas, acordou durante a noite, sonhos, despertar. Olheiras e cansaço visível são indicadores.","dicas_observacao":"1-3: Insônia severa. 4-6: Sono fragmentado. 7-8: Bom sono. 9-10: Sono reparador e profundo."},
+                {"label":"Vitalidade Energética","tipo":"escala_1_10","campo_associado":"Energético","instrucoes_praticas":"COMO AVALIAR: Pergunte: 'Qual seu nível de energia vital hoje (1-10)?'. Observe postura, voz (forte ou fraca), movimentos (lentos ou vigorosos), brilho nos olhos.","dicas_observacao":"1-3: Exausto, sem energia. 4-6: Energia moderada. 7-8: Boa energia. 9-10: Vitalidade plena, radiante."},
+                {"label":"Conexão com Memórias Positivas","tipo":"escala_1_10","campo_associado":"Olfativo","instrucoes_praticas":"COMO AVALIAR: Após inalação dos óleos, pergunte: 'Consegue acessar memórias positivas agora (1-10)?'. Observe se o paciente sorri, relaxa, relata lembranças felizes. Aromas ativam memórias límbicas.","dicas_observacao":"1-3: Bloqueio total. 4-6: Algumas memórias. 7-8: Fácil acesso. 9-10: Memórias vívidas e emocionantes."}
+            ] 
+        },
+        {
+            id: '7',
+            nome: 'Cromoterapia', 
+            categoria: 'Energético',
+            tipo_visualizacao_sugerido: 'chakra_bar',
+            nivel_dificuldade: 'Iniciante',
                         duracao_media: '30-45min', 
                         descricao: 'Uso terapêutico científico das cores e suas frequências específicas para equilibrar centros energéticos, estados emocionais e sistemas orgânicos. Cada cor possui comprimento de onda único que interage com chakras e células, promovendo cura em múltiplos níveis.', 
                         beneficios: ['Harmonização e ativação dos 7 chakras principais', 'Equilíbrio emocional através de frequências cromáticas', 'Estímulo da regeneração celular', 'Redução de dores através de cores específicas', 'Melhora do humor e energia vital', 'Regulação do ritmo circadiano (azul)', 'Estímulo da circulação sanguínea (vermelho)', 'Relaxamento profundo e redução de ansiedade (verde/azul)', 'Aumento de criatividade e expressão (laranja)', 'Purificação energética e transmutação (violeta)'], 
@@ -301,12 +305,13 @@ export const Terapia = {
                             {"label":"Capacidade de Amar e Perdoar (Verde)","tipo":"escala_1_10","campo_associado":"Emocional","instrucoes_praticas":"COMO AVALIAR: Pergunte: 'Consegue perdoar e amar incondicionalmente (1-10)?'. Investigue mágoas, ressentimentos. Observe se toca o peito ao falar de emoções. Chakra cardíaco.","dicas_observacao":"1-3: Mágoas profundas, coração fechado. 4-6: Algumas dificuldades. 7-8: Amoroso. 9-10: Amor incondicional."},
                             {"label":"Clareza de Comunicação (Azul)","tipo":"escala_1_10","campo_associado":"Emocional","instrucoes_praticas":"COMO AVALIAR: Observe durante conversa: clareza ao se expressar, voz (fraca/forte), capacidade de dizer 'não', autenticidade. Chakra laríngeo: comunicação e verdade pessoal.","dicas_observacao":"1-3: Voz fraca, não se expressa. 4-6: Comunicação moderada. 7-8: Comunica-se bem. 9-10: Expressão clara e autêntica."}
                         ] 
-                    },
-                    { 
-                        id: '8', 
-                        nome: 'ThetaHealing', 
-                        categoria: 'Mental', 
-                        nivel_dificuldade: 'Avançado', 
+        },
+        {
+            id: '8',
+            nome: 'ThetaHealing', 
+            categoria: 'Mental',
+            tipo_visualizacao_sugerido: 'bar',
+            nivel_dificuldade: 'Avançado',
                         duracao_media: '60-90min', 
                         descricao: 'Técnica avançada de meditação e cura quântica que acessa o estado theta cerebral (4-7 Hz) para promover mudanças instantâneas em crenças limitantes, traumas e padrões de DNA. Desenvolvida por Vianna Stibal, permite reprogramação profunda da mente subconsciente.', 
                         beneficios: ['Mudança instantânea de crenças limitantes', 'Cura de traumas emocionais profundos', 'Reprogramação de padrões genéticos (epigenética)', 'Libertação de votos, promessas e juramentos de vidas passadas', 'Cura de relacionamentos através da mudança de percepção', 'Manifestação acelerada de objetivos e sonhos', 'Conexão profunda com o Criador/Fonte', 'Aumento de intuição e dons espirituais', 'Cura física através da mudança de frequência celular', 'Transformação de autossabotagem em autorrealização'], 
@@ -318,12 +323,13 @@ export const Terapia = {
                             {"label":"Nível de Resistência à Mudança","tipo":"escala_1_10","campo_associado":"Emocional","instrucoes_praticas":"COMO AVALIAR: Observe hesitação, justificativas, 'mas...'. Pergunte: 'Você REALMENTE quer mudar isso (1-10)?'. 10 = total abertura. 1 = resistência total. Resistência alta indica ganho secundário.","dicas_observacao":"1-3: Muita resistência, ganhos secundários. 4-6: Ambivalência. 7-8: Abertura. 9-10: Total vontade de mudar."},
                             {"label":"Bem-Estar Após Sessão","tipo":"escala_1_10","campo_associado":"Emocional","instrucoes_praticas":"COMO AVALIAR: Ao final, pergunte: 'Como se sente agora (1-10)?'. Observe expressão facial, postura, brilho nos olhos, leveza. Mudança drástica indica sucesso.","dicas_observacao":"1-3: Ainda pesado. 4-6: Leve melhora. 7-8: Bem melhor. 9-10: Leve, renovado, transformado."}
                         ] 
-                    },
-                    { 
-                        id: '9', 
-                        nome: 'Mapa Astral Terapêutico', 
-                        categoria: 'Espiritual', 
-                        nivel_dificuldade: 'Avançado', 
+        },
+        {
+            id: '9',
+            nome: 'Mapa Astral Terapêutico', 
+            categoria: 'Espiritual',
+            tipo_visualizacao_sugerido: 'radar',
+            nivel_dificuldade: 'Avançado',
                         duracao_media: '90-120min', 
                         descricao: 'Análise astrológica profunda personalizada para identificar ciclos cósmicos de impacto, transições planetárias, padrões kármicos e potenciais de saúde física, emocional e espiritual. Ferramenta poderosa de autoconhecimento e planejamento terapêutico.', 
                         beneficios: ['Compreensão profunda de padrões de personalidade e comportamento', 'Identificação de talentos naturais e propósito de vida', 'Reconhecimento de desafios kármicos e lições de alma', 'Previsão de ciclos favoráveis para tratamentos e mudanças', 'Entendimento de questões de saúde através de planetas e casas', 'Clareza sobre relacionamentos e dinâmicas familiares', 'Timing ideal para decisões importantes', 'Integração de aspectos sombrios da personalidade', 'Reconexão com missão de alma', 'Planejamento estratégico de vida baseado em trânsitos'], 
@@ -335,12 +341,13 @@ export const Terapia = {
                             {"label":"Facilidade em Relacionamentos (Vênus e Casa 7)","tipo":"escala_1_10","campo_associado":"Emocional","instrucoes_praticas":"COMO AVALIAR: Analise Vênus, Casa 7, aspectos Vênus-Saturno (dificuldades), Vênus-Júpiter (facilidade). Pergunte sobre histórico de relacionamentos. 10 = relaciona-se com facilidade. 1 = muitas dificuldades.","dicas_observacao":"1-3: Padrões destrutivos. 4-6: Desafios moderados. 7-8: Boas relações. 9-10: Relacionamentos harmoniosos."},
                             {"label":"Momento Atual de Transformação (Trânsitos)","tipo":"escala_1_10","campo_associado":"Mental","instrucoes_praticas":"COMO AVALIAR: Veja trânsitos de planetas lentos (Saturno, Urano, Netuno, Plutão) sobre planetas natais. Quadraturas e oposições = transformação intensa. Trígonos = facilidade. 10 = mudanças profundas. 1 = estável.","dicas_observacao":"1-3: Estabilidade. 4-6: Pequenas mudanças. 7-8: Transformações significativas. 9-10: Crise transformadora."}
                         ] 
-                    },
-                    { 
-                        id: '10', 
-                        nome: 'Terapia Frequencial com Som', 
-                        categoria: 'Vibracional', 
-                        nivel_dificuldade: 'Iniciante', 
+        },
+        {
+            id: '10',
+            nome: 'Terapia Frequencial com Som', 
+            categoria: 'Vibracional',
+            tipo_visualizacao_sugerido: 'line',
+            nivel_dificuldade: 'Iniciante',
                         duracao_media: '30-60min', 
                         descricao: 'Aplicação científica de frequências sonoras específicas (Hz) para harmonização vibracional celular, relaxamento profundo do sistema nervoso e reprogramação de padrões energéticos através de ressonância acústica terapêutica.', 
                         beneficios: ['Redução imediata de estresse e ansiedade', 'Sincronização das ondas cerebrais (alfa, theta, delta)', 'Regeneração celular através de frequências específicas', 'Alívio de dores crônicas por vibração sonora', 'Harmonização profunda dos chakras', 'Melhora da qualidade do sono', 'Aumento de concentração e clareza mental', 'Liberação de bloqueios emocionais através do som', 'Elevação da frequência vibracional pessoal', 'Equilíbrio do sistema nervoso autônomo'], 
@@ -353,12 +360,12 @@ export const Terapia = {
                             {"label":"Nível de Ansiedade Após Sessão","tipo":"escala_1_10","campo_associado":"Emocional","instrucoes_praticas":"COMO AVALIAR: Após sessão, pergunte novamente. Compare com valor inicial. Redução de 3+ pontos = sucesso terapêutico.","dicas_observacao":"Objetivo: redução significativa do valor inicial."}
                         ] 
                     },
-            { 
-                            
-                    id: '11', 
-                    nome: 'Terapia com Geometrias Sagradas', 
-                    categoria: 'Energético', // Corrigido (era Quântico na lista original, mas o primeiro item da lista de áreas era Energético)
-                    nivel_dificuldade: 'Intermediário', 
+        {
+            id: '11',
+            nome: 'Terapia com Geometrias Sagradas', 
+            categoria: 'Energético',
+            tipo_visualizacao_sugerido: 'mandala',
+            nivel_dificuldade: 'Intermediário',
                     duracao_media: '45-60min', 
                     descricao: 'Aplicação terapêutica de padrões geométricos universais (Flor da Vida, Metatron, Proporção Áurea) para ativação celular, reconexão cósmica e harmonização através de códigos matemáticos presentes na natureza e no universo.', 
                     beneficios: ['Ativação de códigos de DNA adormecidos', 'Harmonização celular através de padrões perfeitos', 'Reconexão com geometria sagrada universal', 'Equilíbrio energético profundo', 'Expansão de consciência e percepção', 'Proteção energética através de geometrias', 'Manifestação acelerada pela Lei da Atração', 'Cura de padrões desarmônicos', 'Conexão com inteligência cósmica', 'Regeneração através de proporções áureas'], 
@@ -372,10 +379,11 @@ export const Terapia = {
                     ] 
                 },
                 { 
-                    id: '12', 
-                    nome: 'Cristaloterapia', // Nota: Havia duas entradas de Cristaloterapia (ID 2 e 12). Mantive ambas como estavam nos dados originais.
-                    categoria: 'Energético', 
-                    nivel_dificuldade: 'Intermediário', 
+            id: '12', 
+            nome: 'Cristaloterapia',
+            categoria: 'Energético',
+            tipo_visualizacao_sugerido: 'chakra_bar',
+            nivel_dificuldade: 'Intermediário',
                     duracao_media: '60-90min', 
                     descricao: 'Terapia vibracional ancestral através da aplicação terapêutica de cristais e pedras preciosas para harmonização energética profunda, cura de traumas e expansão da consciência. Cada cristal possui frequência única que ressoa com chakras e campo bioenergético.', 
                     beneficios: ['Harmonização profunda dos 7 chakras', 'Limpeza e fortalecimento do campo áurico', 'Transmutação de energias densas', 'Proteção energética potente', 'Cura de traumas emocionais através de ressonância', 'Ativação de capacidades intuitivas', 'Ancoragem e enraizamento (pedras escuras)', 'Expansão de consciência (ametista, quartzo)', 'Equilíbrio emocional e mental', 'Regeneração celular através de frequências'], 
@@ -389,10 +397,11 @@ export const Terapia = {
                     ] 
                 },
                 { 
-                    id: '13', 
-                    nome: 'Astrologia Quântica', 
-                    categoria: 'Espiritual', 
-                    nivel_dificuldade: 'Avançado', 
+            id: '13', 
+            nome: 'Astrologia Quântica', 
+            categoria: 'Espiritual',
+            tipo_visualizacao_sugerido: 'radar',
+            nivel_dificuldade: 'Avançado',
                     duracao_media: '90-120min', 
                     descricao: 'Análise astrológica avançada integrada com campos quânticos, padrões energéticos pessoais e leitura multidimensional para compreensão profunda de propósito de alma, timing cósmico e potenciais de manifestação.', 
                     beneficios: ['Compreensão do propósito de alma nesta vida', 'Identificação de talentos multidimensionais', 'Timing perfeito para decisões importantes', 'Reconhecimento de ciclos kármicos', 'Previsão de janelas de oportunidade', 'Integração de aspectos sombrios', 'Ativação de potenciais adormecidos', 'Compreensão de relacionamentos quânticos', 'Navegação consciente de trânsitos desafiadores', 'Manifestação alinhada com cosmos'], 
@@ -423,10 +432,11 @@ export const Terapia = {
                     ] 
                 },
                 { 
-                    id: '15', 
-                    nome: 'Ervas e Plantas Medicinais', 
-                    categoria: 'Físico', 
-                    nivel_dificuldade: 'Avançado', 
+            id: '15', 
+            nome: 'Ervas e Plantas Medicinais', 
+            categoria: 'Físico',
+            tipo_visualizacao_sugerido: 'area',
+            nivel_dificuldade: 'Avançado',
                     duracao_media: '60-90min', 
                     descricao: 'Fitoterapia quântica avançada utilizando o poder vibracional das plantas medicinais para harmonização energética, cura natural e reconexão com a sabedoria ancestral da natureza. Cada planta possui inteligência própria e frequência específica que interage com nosso campo bioenergético para promover cura em múltiplos níveis.', 
                     beneficios: ['Cura natural através da sabedoria ancestral das plantas', 'Fortalecimento profundo do sistema imunológico', 'Harmonização energética através de frequências vegetais', 'Desintoxicação suave e profunda do organismo', 'Equilíbrio hormonal natural sem efeitos colaterais', 'Alívio de dores e inflamações crônicas', 'Melhora da qualidade do sono naturalmente', 'Redução de ansiedade e estresse através de plantas adaptógenas', 'Regeneração celular e anti-aging natural', 'Conexão profunda com a natureza e ciclos sazonais', 'Suporte emocional através de plantas aliadas', 'Expansão da consciência via plantas sagradas (uso ritual)'], 
@@ -444,10 +454,11 @@ export const Terapia = {
                 },
                                 // ... (Terapias 1 a 15, como nas respostas anteriores) ...
                 { 
-                    id: '16', 
-                    nome: 'Iridologia', 
-                    categoria: 'Físico', 
-                    nivel_dificuldade: 'Avançado', 
+            id: '16', 
+            nome: 'Iridologia', 
+            categoria: 'Físico',
+            tipo_visualizacao_sugerido: 'bar',
+            nivel_dificuldade: 'Avançado',
                     duracao_media: '60-90min', 
                     descricao: 'Ciência diagnóstica ancestral que analisa os sinais, marcas, cores e padrões da íris ocular para avaliação completa do estado de saúde geral, identificação de predisposições genéticas, deficiências orgânicas, nível de toxemia e padrões constitucionais. A íris é um mapa completo do corpo humano refletido nos olhos, permitindo análise preventiva e holística.', 
                     beneficios: ['Identificação precoce de tendências patológicas antes dos sintomas', 'Avaliação profunda da constituição genética do indivíduo', 'Mapeamento completo de órgãos fragilizados e fortalecidos', 'Detecção de nível de toxemia e necessidade de desintoxicação', 'Avaliação da vitalidade e capacidade de regeneração', 'Identificação de deficiências nutricionais pela análise da íris', 'Compreensão de padrões familiares de doenças', 'Orientação preventiva personalizada e eficaz', 'Acompanhamento visual da evolução de tratamentos', 'Ferramenta educativa poderosa para o paciente', 'Integração com outras terapias para plano holístico', 'Análise do sistema nervoso e nível de estresse crônico'], 
@@ -464,10 +475,11 @@ export const Terapia = {
                     ] 
                 },
                 { 
-                    id: '17', 
-                    nome: 'Constelação Sistêmica Familiar', 
-                    categoria: 'Sistêmico', 
-                    nivel_dificuldade: 'Avançado', 
+            id: '17', 
+            nome: 'Constelação Sistêmica Familiar', 
+            categoria: 'Sistêmico',
+            tipo_visualizacao_sugerido: 'bar',
+            nivel_dificuldade: 'Avançado',
                     duracao_media: '90-180min', 
                     descricao: 'Terapia transgeneracional profunda desenvolvida por Bert Hellinger que revela dinâmicas ocultas no sistema familiar, identificando padrões transgeracionais de sofrimento, emaranhamentos sistêmicos, lealdades invisíveis e ordens do amor violadas. Através de representações espaciais, traz à luz questões inconscientes herdadas de ancestrais, permitindo reconciliação, liberação e reordenamento do sistema para que o amor volte a fluir.', 
                     beneficios: ['Revelação de dinâmicas familiares ocultas que causam sofrimento', 'Liberação de padrões transgeracionais de doença, pobreza e fracasso', 'Compreensão profunda de conflitos de relacionamento recorrentes', 'Reconciliação com pais, irmãos e ancestrais', 'Quebra de lealdades invisíveis que limitam a vida', 'Alívio de culpa e peso emocional herdado', 'Reorganização da hierarquia familiar (ordem)', 'Reconexão com a força dos ancestrais', 'Solução de sintomas físicos de origem sistêmica', 'Liberação de destinos trágicos repetidos na família', 'Permissão para ser feliz e bem-sucedido', 'Paz profunda com o passado familiar'], 
@@ -484,10 +496,11 @@ export const Terapia = {
                     ] 
                 },
                 { 
-                    id: '18', 
-                    nome: 'Acupuntura Quântica', 
-                    categoria: 'Energético', 
-                    nivel_dificuldade: 'Avançado', 
+            id: '18', 
+            nome: 'Acupuntura Quântica', 
+            categoria: 'Energético',
+            tipo_visualizacao_sugerido: 'chakra_bar',
+            nivel_dificuldade: 'Avançado',
                     duracao_media: '60-90min', 
                     descricao: 'Técnica milenar chinesa profundamente adaptada para leitura e harmonização dos meridianos energéticos através de análise quântica do campo bioenergético. Combina agulhas finíssimas de acupuntura, moxabustão, ventosaterapia e pulsologia chinesa para restaurar o fluxo do Qi (energia vital), equilibrar Yin-Yang, fortalecer órgãos e sistemas. Visão holística: corpo, mente e espírito são um só sistema integrado de energia.', 
                     beneficios: ['Alívio rápido e duradouro de dores agudas e crônicas', 'Restauração do fluxo energético (Qi) nos meridianos', 'Equilíbrio profundo entre Yin e Yang', 'Fortalecimento do Wei Qi (energia defensiva/imunidade)', 'Regulação do sistema nervoso e redução de estresse', 'Melhora de insônia e qualidade do sono', 'Tratamento eficaz de enxaquecas e cefaleias', 'Alívio de sintomas digestivos (gastrite, intestino irritável)', 'Regulação hormonal e menstrual', 'Tratamento de ansiedade e depressão leve', 'Auxílio em processos de desintoxicação', 'Aumento de vitalidade e disposição geral'], 
@@ -504,10 +517,11 @@ export const Terapia = {
                     ] 
                 },
                 { 
-                    id: '19', 
-                    nome: 'Homeopatia Quântica', 
-                    categoria: 'Vibracional', 
-                    nivel_dificuldade: 'Avançado', 
+            id: '19', 
+            nome: 'Homeopatia Quântica', 
+            categoria: 'Vibracional',
+            tipo_visualizacao_sugerido: 'line',
+            nivel_dificuldade: 'Avançado',
                     duracao_media: '90-120min', 
                     descricao: 'Sistema terapêutico vibracional desenvolvido por Samuel Hahnemann baseado no princípio \'Similia similibus curantur\' (semelhante cura semelhante). Utiliza medicamentos homeopáticos ultradiluídos e florais de acordo com a leitura vibracional profunda do paciente, tratando através de frequências sutis que ressoam com o campo bioenergético individual. A cura acontece de dentro para fora, do mais profundo ao mais superficial.', 
                     beneficios: ['Tratamento profundo da causa raiz, não apenas sintomas', 'Cura de doenças crônicas resistentes a outros tratamentos', 'Fortalecimento profundo da força vital e imunidade', 'Ausência completa de efeitos colaterais ou toxicidade', 'Seguro para todas as idades (bebês, gestantes, idosos)', 'Tratamento individualizado conforme totalidade dos sintomas', 'Harmonização emocional, mental e física simultânea', 'Prevenção de doenças através de tratamento constitucional', 'Complementar a qualquer outro tratamento sem interações', 'Despertar da capacidade autocurativa do organismo', 'Tratamento de padrões hereditários (miasmas)', 'Transformação profunda e duradoura da saúde'], 
@@ -524,10 +538,11 @@ export const Terapia = {
                     ] 
                 },
                 { 
-                    id: '20', 
-                    nome: 'Apometria Quântica', 
-                    categoria: 'Espiritual', 
-                    nivel_dificuldade: 'Avançado', 
+            id: '20', 
+            nome: 'Apometria Quântica', 
+            categoria: 'Espiritual',
+            tipo_visualizacao_sugerido: 'radar',
+            nivel_dificuldade: 'Avançado',
                     duracao_media: '90-120min', 
                     descricao: 'Técnica de desdobramento espiritual avançada para resgate e harmonização de fragmentos da alma dispersos em diferentes linhas temporais e dimensões. Desenvolvida no Brasil pelo Dr. José Lacerda de Azevedo, permite trabalho profundo de limpeza kármica, liberação de obsessões espirituais e reintegração da consciência fragmentada.', 
                     beneficios: ['Resgate de fragmentos de alma perdidos em traumas', 'Limpeza profunda de memórias kármicas densas', 'Liberação de vínculos energéticos prejudiciais', 'Remoção de energias densas e obsessões espirituais', 'Cura de traumas de vidas passadas', 'Harmonização de linhas temporais paralelas', 'Restauração da integridade energética completa', 'Alívio de fobias e medos sem causa aparente', 'Melhora de relacionamentos através da limpeza de cordões', 'Expansão da consciência e propósito de alma', 'Fechamento de portais energéticos negativos', 'Desprogramação de implantes energéticos'], 
@@ -544,10 +559,11 @@ export const Terapia = {
                     ] 
                 },
                 { 
-                    id: '21', 
-                    nome: 'Numerologia Terapêutica', 
-                    categoria: 'Mental', 
-                    nivel_dificuldade: 'Intermediário', 
+            id: '21', 
+            nome: 'Numerologia Terapêutica', 
+            categoria: 'Mental',
+            tipo_visualizacao_sugerido: 'bar',
+            nivel_dificuldade: 'Intermediário',
                     duracao_media: '90-120min', 
                     descricao: 'Ciência milenar que estuda a vibração energética dos números e sua influência na jornada de vida, personalidade, talentos, desafios e propósito de alma. Cada número carrega frequência específica que revela aspectos profundos da consciência, ciclos de vida e potencialidades latentes. Utilizada como ferramenta terapêutica para autoconhecimento, orientação vocacional e compreensão de padrões de comportamento.', 
                     beneficios: ['Autoconhecimento profundo através dos números pessoais', 'Clareza sobre propósito de vida e missão de alma', 'Compreensão de talentos naturais e potencialidades', 'Identificação de desafios e lições desta encarnação', 'Orientação vocacional e profissional precisa', 'Entendimento de ciclos pessoais (anos, meses, dias)', 'Melhora de relacionamentos através de compatibilidade numérica', 'Tomada de decisões importantes com timing correto', 'Reconexão com essência e autenticidade', 'Planejamento estratégico de vida baseado em ciclos', 'Cura de padrões limitantes através da compreensão numérica', 'Expansão da consciência sobre arquétipos pessoais'], 
@@ -568,7 +584,8 @@ export const Terapia = {
         {
             id: '22',                                // ... (Terapias 1 a 21, como nas respostas anteriores) ...           id: '22', 
                     nome: 'Terapia Reencarnacionista', 
-                    categoria: 'Espiritual', 
+                    categoria: 'Espiritual',
+                    tipo_visualizacao_sugerido: 'radar', 
                     nivel_dificuldade: 'Avançado', 
                     duracao_media: '120-180min', 
                     descricao: 'Abordagem terapêutica profunda baseada na filosofia reencarnacionista, que utiliza técnicas de regressão a vidas passadas, compreensão de ciclos evolutivos e eras da alma para tratar questões emocionais, traumas e padrões comportamentais que transcendem a vida atual. Permite acesso a memórias de outras encarnações, compreensão de lições kármicas e liberação de contratos e votos de vidas anteriores.', 
@@ -591,6 +608,7 @@ export const Terapia = {
             id: '23',
             nome: 'Shiatsu',
             categoria: 'Físico',
+            tipo_visualizacao_sugerido: 'chakra_bar',
             nivel_dificuldade: 'Intermediário',
             duracao_media: '60-90min',
             descricao: 'Arte terapêutica japonesa milenar que utiliza pressão precisa dos dedos, palmas e polegares sobre pontos energéticos (tsubos) ao longo dos meridianos para restabelecer o fluxo equilibrado de Ki (energia vital). Combina princípios da Medicina Tradicional Chinesa com técnicas corporais japonesas para promover saúde física, emocional e energética profunda.',
@@ -610,10 +628,11 @@ export const Terapia = {
                     ] 
                 },
                 { 
-                    id: '24', 
-                    nome: 'Medicina Ortomolecular', 
-                    categoria: 'Físico', 
-                    nivel_dificuldade: 'Avançado', 
+            id: '24', 
+            nome: 'Medicina Ortomolecular', 
+            categoria: 'Físico',
+            tipo_visualizacao_sugerido: 'area',
+            nivel_dificuldade: 'Avançado',
                     duracao_media: '60-90min', 
                     descricao: 'Abordagem terapêutica científica avançada que busca o equilíbrio bioquímico celular através da correção de deficiências nutricionais, desintoxicação de metais pesados, modulação hormonal e suplementação de vitaminas, minerais e antioxidantes em doses ideais. Criada pelo Dr. Linus Pauling (2x Prêmio Nobel), trata a raiz das doenças em nível molecular para restaurar saúde plena.', 
                     beneficios: ['Correção de deficiências nutricionais em nível celular', 'Aumento significativo de energia e vitalidade', 'Fortalecimento profundo do sistema imunológico', 'Desintoxicação de metais pesados (mercúrio, chumbo, alumínio)', 'Retardo do envelhecimento celular (anti-aging)', 'Melhora de função cognitiva e memória', 'Equilíbrio hormonal natural', 'Redução de inflamações crônicas', 'Prevenção de doenças degenerativas', 'Melhora da qualidade de pele, cabelo e unhas', 'Otimização do metabolismo e emagrecimento saudável', 'Tratamento de fadiga crônica e burnout'], 
@@ -632,10 +651,11 @@ export const Terapia = {
                     ] 
                 },
                 { 
-                    id: '25', 
-                    nome: 'Hipnoterapia', 
-                    categoria: 'Mental', 
-                    nivel_dificuldade: 'Avançado', 
+            id: '25', 
+            nome: 'Hipnoterapia', 
+            categoria: 'Mental',
+            tipo_visualizacao_sugerido: 'bar',
+            nivel_dificuldade: 'Avançado',
                     duracao_media: '60-90min', 
                     descricao: 'Terapia profunda que utiliza o estado de transe hipnótico para acessar o subconsciente, reprogramar padrões limitantes, curar traumas emocionais profundos e instalar novos comportamentos positivos. Através do relaxamento profundo e sugestões terapêuticas direcionadas, permite mudanças rápidas e duradouras em nível inconsciente, onde residem 95% de nossos comportamentos automáticos.', 
                     beneficios: ['Acesso direto ao subconsciente para reprogramação profunda', 'Cura rápida de traumas emocionais (TEPT, fobias)', 'Eliminação de vícios e compulsões (tabaco, álcool, comida)', 'Controle efetivo de dor crônica sem medicação', 'Superação de medos e fobias paralisantes', 'Melhora significativa de autoestima e autoconfiança', 'Tratamento de ansiedade e ataques de pânico', 'Preparação mental para cirurgias e procedimentos', 'Melhora de performance (esportes, estudos, trabalho)', 'Regressão a vidas passadas para compreensão de padrões', 'Instalação de novos hábitos positivos', 'Tratamento de insônia e distúrbios do sono'], 
@@ -654,10 +674,11 @@ export const Terapia = {
                     ] 
                 },
                 { 
-                    id: '26', 
-                    nome: 'Psicoterapia Infantil', 
-                    categoria: 'Emocional', 
-                    nivel_dificuldade: 'Avançado', 
+            id: '26', 
+            nome: 'Psicoterapia Infantil', 
+            categoria: 'Emocional',
+            tipo_visualizacao_sugerido: 'area',
+            nivel_dificuldade: 'Avançado',
                     duracao_media: '45-50min', 
                     descricao: 'Abordagem terapêutica especializada voltada para crianças (2-12 anos), utilizando linguagens lúdicas como jogos, desenhos, brinquedos e contação de histórias para acessar o mundo emocional infantil. Trabalha dificuldades emocionais, comportamentais, traumas e desenvolvimento saudável, sempre envolvendo a família no processo terapêutico. Respeita a singularidade de cada criança e seu ritmo de desenvolvimento.', 
                     beneficios: ['Resolução de dificuldades emocionais em linguagem acessível à criança', 'Desenvolvimento de inteligência emocional desde cedo', 'Superação de traumas de forma lúdica e segura', 'Melhora significativa de comportamento (agressividade, birras)', 'Fortalecimento de autoestima e autoconfiança', 'Desenvolvimento de habilidades sociais e empatia', 'Auxílio em transições difíceis (divórcio, mudanças, perdas)', 'Tratamento de ansiedade infantil e medos', 'Melhora de rendimento escolar e concentração', 'Prevenção de transtornos mais graves na adolescência', 'Fortalecimento do vínculo familiar', 'Orientação parental para manejo adequado'], 
@@ -676,10 +697,11 @@ export const Terapia = {
                     ] 
                 },
                 { 
-                    id: '27', 
-                    nome: 'Xamanismo', 
-                    categoria: 'Espiritual', 
-                    nivel_dificuldade: 'Avançado', 
+            id: '27', 
+            nome: 'Xamanismo', 
+            categoria: 'Espiritual',
+            tipo_visualizacao_sugerido: 'radar',
+            nivel_dificuldade: 'Avançado',
                     duracao_media: '90-180min', 
                     descricao: 'Prática espiritual ancestral milenar presente em todas as culturas indígenas do mundo, que trabalha com estados ampliados de consciência para cura física, emocional, espiritual e da alma. O xamã atua como ponte entre o mundo ordinário e o mundo espiritual, acessando aliados espirituais (animais de poder, mestres ascensionados, elementais) para diagnóstico, extração de energias densas, recuperação de fragmentos de alma e restauração do equilíbrio sagrado do ser.', 
                     beneficios: ['Reconexão profunda com a essência da alma e propósito de vida', 'Cura de traumas ancestrais e feridas transgeracionais', 'Recuperação de fragmentos de alma perdidos em traumas', 'Extração de energias densas, obsessões e implantes espirituais', 'Restauração do poder pessoal e força vital', 'Conexão com animais de poder e guias espirituais', 'Limpeza e harmonização dos 4 corpos (físico, emocional, mental, espiritual)', 'Cura de doenças de fundo espiritual', 'Equilíbrio com as forças da natureza e elementos', 'Liberação de votos, pactos e contratos de vidas passadas', 'Honra e reconciliação com ancestrais', 'Despertar da visão espiritual e dons mediúnicos'], 
@@ -703,6 +725,7 @@ export const Terapia = {
             id: '28',
             nome: 'Barras de Access',
             categoria: 'Mental',
+            tipo_visualizacao_sugerido: 'bar',
             nivel_dificuldade: 'Iniciante',
             duracao_media: '60-90min',
             descricao: 'Terapia energética que utiliza 32 pontos na cabeça para liberar bloqueios eletromagnéticos, pensamentos limitantes e cargas emocionais armazenadas.',
@@ -729,136 +752,171 @@ export const Terapia = {
 // Sistema de Sessões com Firebase Firestore
 export const Sessao = {
     filter: async (params, order) => {
-        try {
-            const filters = [];
-            
-            // Aplicar filtro se houver paciente_id
-            if (params && params.paciente_id) {
-                filters.push({ field: 'paciente_id', operator: '==', value: params.paciente_id });
-            }
-            
-            // Aplicar ordenação
-            const orderByField = order === '-data_sessao' ? 'data_sessao' : null;
-            const orderDirection = order === '-data_sessao' ? 'desc' : 'asc';
-            
-            const sessoes = await queryDocuments('sessoes', filters, orderByField, orderDirection);
-            
-            // Converter timestamps do Firestore para strings ISO
-            return sessoes.map(s => ({
-                ...s,
-                data_sessao: s.data_sessao?.toDate?.()?.toISOString() || s.data_sessao,
-                created_at: s.created_at?.toDate?.()?.toISOString() || s.created_at,
-                updated_at: s.updated_at?.toDate?.()?.toISOString() || s.updated_at
-            }));
-        } catch (error) {
-            console.error('Erro ao buscar sessões no Firebase:', error);
-            console.log('🔄 Usando localStorage como fallback');
-            
-            // Fallback para localStorage se Firebase falhar
-            const savedSessions = localStorage.getItem('5d_sessoes');
-            const todasSessoes = savedSessions ? JSON.parse(savedSessions) : [];
-            
-            // Filtrar por paciente_id se especificado
-            let sessoes = todasSessoes;
-            if (params && params.paciente_id) {
-                sessoes = todasSessoes.filter(s => s.paciente_id === params.paciente_id);
-            }
-            
-            // Ordenar se necessário
-            if (order === '-data_sessao') {
-                sessoes.sort((a, b) => new Date(b.data_sessao) - new Date(a.data_sessao));
-            }
-            
-            return sessoes;
+        // SEMPRE buscar do Firestore - sem fallback silencioso
+        const filters = [];
+        
+        // Aplicar filtro se houver paciente_id
+        if (params && params.paciente_id) {
+            filters.push({ field: 'paciente_id', operator: '==', value: params.paciente_id });
         }
+        
+        // Firestore requer índice composto para filtro + ordenação
+        // Vamos buscar sem ordenação e ordenar em memória para evitar necessidade de criar índice
+        const sessoes = await queryDocuments('sessoes', filters, null, 'asc');
+        console.log(`✅ ${sessoes.length} sessão(ões) encontrada(s) no Firestore`);
+        
+        // Converter timestamps do Firestore para strings ISO
+        let sessoesProcessadas = sessoes.map(s => ({
+            ...s,
+            data_sessao: s.data_sessao?.toDate?.()?.toISOString() || s.data_sessao,
+            created_at: s.created_at?.toDate?.()?.toISOString() || s.created_at,
+            updated_at: s.updated_at?.toDate?.()?.toISOString() || s.updated_at
+        }));
+        
+        // Ordenar em memória se necessário
+        if (order === '-data_sessao') {
+            sessoesProcessadas = sessoesProcessadas.sort((a, b) => {
+                const dateA = new Date(a.data_sessao || 0);
+                const dateB = new Date(b.data_sessao || 0);
+                return dateB.getTime() - dateA.getTime(); // Ordem descendente (mais recente primeiro)
+            });
+        }
+        
+        return sessoesProcessadas;
     },
     
     create: async (data) => {
-        try {
-            // Criar no Firestore
-            const sessao = await createDocument('sessoes', data);
-            console.log('📝 Sessão criada no Firebase:', sessao);
-            
-            // Também salvar no localStorage como backup
-            const savedSessions = localStorage.getItem('5d_sessoes');
-            const sessoes = savedSessions ? JSON.parse(savedSessions) : [];
-            sessoes.push(sessao);
-            localStorage.setItem('5d_sessoes', JSON.stringify(sessoes));
-            console.log('💾 Sessão também salva no localStorage como backup');
-            
-            return sessao;
-        } catch (error) {
-            console.error('Erro ao criar sessão no Firebase, usando localStorage como fallback:', error);
-            // Fallback para localStorage
-            const savedSessions = localStorage.getItem('5d_sessoes');
-            const sessoes = savedSessions ? JSON.parse(savedSessions) : [];
-            
-            const newSessao = {
-                id: `sessao-${Date.now()}`,
-                ...data,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-            };
-            
-            sessoes.push(newSessao);
-            localStorage.setItem('5d_sessoes', JSON.stringify(sessoes));
-            console.log('💾 Sessão salva no localStorage');
-            return newSessao;
+        if (!data.paciente_id) {
+            throw new Error('ERRO: paciente_id é obrigatório. Não é possível salvar sessão sem paciente associado.');
         }
+        
+        console.log('💾 Salvando sessão no Firestore (permanente)...');
+        console.log('🔗 Paciente ID:', data.paciente_id);
+        
+        // Buscar dados do paciente para obter o terapeuta_id
+        const pacienteData = await getDocument('pacientes', data.paciente_id);
+        if (!pacienteData) {
+            throw new Error('ERRO: Paciente não encontrado. Não é possível criar sessão para um paciente inexistente.');
+        }
+        
+        // Obter terapeuta_id do paciente
+        const terapeuta_id = pacienteData.terapeuta_id;
+        if (!terapeuta_id) {
+            throw new Error('ERRO: Paciente não possui terapeuta_id associado. Verifique os dados do paciente.');
+        }
+        
+        console.log('👤 Terapeuta ID obtido do paciente:', terapeuta_id);
+        
+        // Preparar dados para salvamento, convertendo data_sessao para Timestamp se necessário
+        const { Timestamp } = await import('firebase/firestore');
+        const dataToSave = { 
+            ...data,
+            terapeuta_id: terapeuta_id // Adicionar terapeuta_id obrigatório para as regras do Firestore
+        };
+        
+        // Se data_sessao é uma string ISO, converter para Timestamp do Firestore
+        if (dataToSave.data_sessao && typeof dataToSave.data_sessao === 'string') {
+            dataToSave.data_sessao = Timestamp.fromDate(new Date(dataToSave.data_sessao));
+            console.log('📅 data_sessao convertida para Timestamp:', dataToSave.data_sessao);
+        }
+        
+        // SEMPRE criar no Firestore PRIMEIRO - se falhar, erro explícito
+        const sessao = await createDocument('sessoes', dataToSave);
+        console.log('✅ Sessão criada PERMANENTEMENTE no Firestore:', sessao.id);
+        
+        // Converter Timestamp de volta para ISO string no retorno para manter consistência
+        const sessaoRetorno = {
+            ...sessao,
+            data_sessao: data.data_sessao // Manter formato original (string ISO) no retorno
+        };
+        
+        // Cache local (não crítico)
+        try {
+            const savedSessions = localStorage.getItem('5d_sessoes');
+            const sessoes = savedSessions ? JSON.parse(savedSessions) : [];
+            sessoes.push(sessaoRetorno);
+            localStorage.setItem('5d_sessoes', JSON.stringify(sessoes));
+            console.log('💾 Cache local atualizado (backup secundário)');
+        } catch (localError) {
+            console.warn('⚠️ Erro ao atualizar cache local (não crítico):', localError);
+        }
+        
+        return sessaoRetorno;
     },
     
     update: async (id, data) => {
-        try {
-            // Atualizar no Firestore
-            const sessao = await updateDocument('sessoes', id, data);
-            console.log('📝 Sessão atualizada no Firebase:', sessao);
-            return { id, ...data };
-        } catch (error) {
-            console.error('Erro ao atualizar sessão no Firebase:', error);
-            // Fallback para localStorage
-            const savedSessions = localStorage.getItem('5d_sessoes');
-            const sessoes = JSON.parse(savedSessions);
-            const index = sessoes.findIndex(s => s.id === id);
-            
-            if (index !== -1) {
-                sessoes[index] = { ...sessoes[index], ...data, updated_at: new Date().toISOString() };
-                localStorage.setItem('5d_sessoes', JSON.stringify(sessoes));
-                return sessoes[index];
-            }
-            throw new Error('Sessão não encontrada');
+        if (!id) {
+            throw new Error('ERRO: ID da sessão é obrigatório para atualização.');
         }
+        
+        console.log('💾 Atualizando sessão no Firestore (permanente)...', id);
+        
+        // SEMPRE atualizar no Firestore PRIMEIRO - se falhar, erro explícito
+        await updateDocument('sessoes', id, data);
+        console.log('✅ Sessão atualizada PERMANENTEMENTE no Firestore:', id);
+        
+        // Cache local (não crítico)
+        try {
+            const savedSessions = localStorage.getItem('5d_sessoes');
+            if (savedSessions) {
+                const sessoes = JSON.parse(savedSessions);
+                const index = sessoes.findIndex(s => s.id === id);
+                if (index !== -1) {
+                    sessoes[index] = { ...sessoes[index], ...data, updated_at: new Date().toISOString() };
+                    localStorage.setItem('5d_sessoes', JSON.stringify(sessoes));
+                    console.log('💾 Cache local atualizado (backup secundário)');
+                }
+            }
+        } catch (localError) {
+            console.warn('⚠️ Erro ao atualizar cache local (não crítico):', localError);
+        }
+        
+        return { id, ...data };
     },
     
     get: async (id) => {
-        try {
-            const sessao = await getDocument('sessoes', id);
-            if (sessao) {
-                return {
-                    ...sessao,
-                    data_sessao: sessao.data_sessao?.toDate?.()?.toISOString() || sessao.data_sessao,
-                    created_at: sessao.created_at?.toDate?.()?.toISOString() || sessao.created_at,
-                    updated_at: sessao.updated_at?.toDate?.()?.toISOString() || sessao.updated_at
-                };
-            }
-            return null;
-        } catch (error) {
-            console.error('Erro ao buscar sessão no Firebase:', error);
-            // Fallback para localStorage
-            const savedSessions = localStorage.getItem('5d_sessoes');
-            if (!savedSessions) return null;
-            
-            const sessoes = JSON.parse(savedSessions);
-            return sessoes.find(s => s.id === id) || null;
+        if (!id) {
+            throw new Error('ERRO: ID da sessão é obrigatório.');
         }
+        
+        // SEMPRE buscar do Firestore - sem fallback
+        const sessao = await getDocument('sessoes', id);
+        if (!sessao) {
+            console.warn(`⚠️ Sessão ${id} não encontrada no Firestore`);
+            return null;
+        }
+        
+        console.log('✅ Sessão encontrada no Firestore:', id);
+        return {
+            ...sessao,
+            data_sessao: sessao.data_sessao?.toDate?.()?.toISOString() || sessao.data_sessao,
+            created_at: sessao.created_at?.toDate?.()?.toISOString() || sessao.created_at,
+            updated_at: sessao.updated_at?.toDate?.()?.toISOString() || sessao.updated_at
+        };
     },
     
     delete: async (id) => {
+        if (!id) {
+            throw new Error('ERRO: ID da sessão é obrigatório para exclusão.');
+        }
+        
+        console.log('🗑️ Deletando sessão PERMANENTEMENTE do Firestore:', id);
+        
+        // SEMPRE deletar do Firestore - se falhar, erro explícito
+        await deleteDocument('sessoes', id);
+        console.log('✅ Sessão deletada PERMANENTEMENTE do Firestore:', id);
+        
+        // Cache local (não crítico)
         try {
-            await deleteDocument('sessoes', id);
-            console.log('✅ Sessão deletada do Firebase');
-        } catch (error) {
-            console.error('Erro ao deletar sessão:', error);
-            throw error;
+            const savedSessions = localStorage.getItem('5d_sessoes');
+            if (savedSessions) {
+                const sessoes = JSON.parse(savedSessions);
+                const sessoesAtualizadas = sessoes.filter(s => s.id !== id);
+                localStorage.setItem('5d_sessoes', JSON.stringify(sessoesAtualizadas));
+                console.log('💾 Cache local atualizado (backup secundário)');
+            }
+        } catch (localError) {
+            console.warn('⚠️ Erro ao atualizar cache local (não crítico):', localError);
         }
     }
 };
@@ -2955,80 +3013,84 @@ export const ErvaPlanta = {
         }
     };
     
-    // Auth - sistema demo com LocalStorage
+    // Auth - Sistema real com Firebase
+    // getCurrentUser, onAuthChange já importados no topo do arquivo
+    // getDocument, createDocument, updateDocument também já importados no topo
+
     export const User = {
         me: async () => {
-            // Buscar dados salvos no localStorage ou retornar dados padrão
-            const savedUser = localStorage.getItem('5d_user_profile');
-            if (savedUser) {
-                return JSON.parse(savedUser);
+            // Verificar usuário autenticado no Firebase
+            const firebaseUser = getCurrentUser();
+            
+            if (!firebaseUser) {
+                console.log('⚠️ Nenhum usuário autenticado');
+                return null; // Sem usuário demo - exige autenticação real
             }
             
-            // Dados padrão - usar ID fixo para consistência
-            return {
-                id: 'demo-user-001',
-                full_name: 'Usuário Demo',
-                email: 'demo@example.com',
-                profile_picture_url: null,
-                especialidade: '',
-                registro: '',
-                formacao: '',
-                bio: ''
-            };
+            try {
+                // Buscar perfil do terapeuta no Firestore
+                const terapeutaDoc = await getDocument('terapeutas', firebaseUser.uid);
+                
+                if (terapeutaDoc) {
+                    console.log('👤 Perfil de terapeuta encontrado:', terapeutaDoc);
+                    return terapeutaDoc;
+                }
+                
+                // Se não existe perfil, criar automaticamente como terapeuta
+                console.log('📝 Criando perfil de terapeuta para novo usuário...');
+                const newTerapeutaProfile = {
+                    id: firebaseUser.uid,
+                    full_name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Terapeuta',
+                    email: firebaseUser.email,
+                    profile_picture_url: firebaseUser.photoURL || null,
+                    especialidade: '',
+                    registro: '',
+                    formacao: '',
+                    bio: '',
+                    is_terapeuta: true, // Sempre é terapeuta
+                    created_at: new Date().toISOString()
+                };
+                
+                await createDocument('terapeutas', newTerapeutaProfile, firebaseUser.uid);
+                console.log('✅ Novo terapeuta criado automaticamente');
+                
+                return newTerapeutaProfile;
+            } catch (error) {
+                console.error('❌ Erro ao buscar/criar perfil:', error);
+                throw error;
+            }
         },
         login: async () => {
-            console.log('✅ Login demo - sem Base44');
-            
-            // Verificar se já existe perfil salvo
-            const savedUser = localStorage.getItem('5d_user_profile');
-            
-            if (savedUser) {
-                const user = JSON.parse(savedUser);
-                console.log('👤 Usuário existente encontrado:', user);
-                return { id: user.id };
+            // Esta função não faz login diretamente - o login é feito via Welcome.jsx com loginWithGoogle
+            // Aqui apenas verifica se está autenticado
+            const firebaseUser = getCurrentUser();
+            if (!firebaseUser) {
+                throw new Error('Usuário não autenticado. Faça login primeiro.');
             }
-            
-            // Criar perfil inicial com ID consistente
-            const initialProfile = {
-                id: 'demo-user-001',
-                full_name: 'Usuário Demo',
-                email: 'demo@example.com',
-                profile_picture_url: null,
-                especialidade: '',
-                registro: '',
-                formacao: '',
-                bio: '',
-                created_at: new Date().toISOString()
-            };
-            
-            // Salvar no localStorage
-            localStorage.setItem('5d_user_profile', JSON.stringify(initialProfile));
-            console.log('💾 Novo perfil criado e salvo:', initialProfile);
-            
-            return { id: 'demo-user-001' };
+            return { id: firebaseUser.uid };
         },
         updateMe: async (data) => {
-            // Salvar dados do usuário no localStorage
-            const savedUser = localStorage.getItem('5d_user_profile');
-            const currentUser = savedUser ? JSON.parse(savedUser) : {
-                id: 'demo-user-001',
-                full_name: 'Usuário Demo',
-                email: 'demo@example.com',
-                profile_picture_url: null,
-                especialidade: '',
-                registro: '',
-                formacao: '',
-                bio: ''
-            };
+            const firebaseUser = getCurrentUser();
+            if (!firebaseUser) {
+                throw new Error('Usuário não autenticado');
+            }
             
-            const updatedUser = { ...currentUser, ...data, updated_at: new Date().toISOString() };
-            localStorage.setItem('5d_user_profile', JSON.stringify(updatedUser));
-            
-            console.log('💾 Perfil salvo no localStorage:', updatedUser);
-            return { success: true };
+            try {
+                // Atualizar perfil no Firestore
+                await updateDocument('terapeutas', firebaseUser.uid, {
+                    ...data,
+                    updated_at: new Date().toISOString()
+                });
+                
+                console.log('💾 Perfil atualizado no Firestore');
+                return { success: true };
+            } catch (error) {
+                console.error('❌ Erro ao atualizar perfil:', error);
+                throw error;
+            }
         },
-        updatePassword: async () => {
-            console.log('🔑 Senha atualizada (demo)');
-            return { success: true };
+        updatePassword: async (newPassword) => {
+            const { changePassword } = await import('./firebaseAuth');
+            return await changePassword(newPassword);
         }
     };

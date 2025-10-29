@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -314,6 +314,9 @@ IMPORTANTE: Esta é uma análise de apoio terapêutico integrativo, não diagnó
                         <Camera className="text-purple-600" />
                         Registrar Nova Sessão
                     </DialogTitle>
+                    <DialogDescription className="sr-only">
+                        Preencha os dados para registrar uma nova sessão terapêutica
+                    </DialogDescription>
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit} className="space-y-6">

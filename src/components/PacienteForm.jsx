@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -99,11 +99,20 @@ export default function PacienteForm({ open, onOpenChange, paciente, onSave, onD
         
         setIsSaving(true);
         try {
+            console.log('📝 Formulário sendo enviado com dados:', formData);
             await onSave(formData);
+            console.log('✅ Formulário salvo com sucesso, fechando...');
+            // Só fecha se não houver erro
             onOpenChange(false);
         } catch (error) {
-            console.error('Erro ao salvar paciente:', error);
-            alert('Erro ao salvar paciente. Tente novamente.');
+            console.error('❌ Erro ao salvar paciente no formulário:', error);
+            console.error('📋 Detalhes do erro no formulário:', {
+                code: error.code,
+                message: error.message,
+                stack: error.stack
+            });
+            // Não mostrar alert aqui - o handleSavePaciente já mostra
+            // Manter formulário aberto para permitir correção
         } finally {
             setIsSaving(false);
         }
@@ -153,6 +162,9 @@ export default function PacienteForm({ open, onOpenChange, paciente, onSave, onD
                     <DialogTitle className="text-2xl font-bold text-slate-900">
                         {paciente ? 'Editar Paciente' : 'Novo Paciente'}
                     </DialogTitle>
+                    <DialogDescription className="sr-only">
+                        {paciente ? 'Edite as informações do paciente' : 'Preencha os dados para cadastrar um novo paciente'}
+                    </DialogDescription>
                 </DialogHeader>
                 
                 <form onSubmit={handleSubmit} className="space-y-6">

@@ -31,7 +31,7 @@ Sistema de gestão para terapeutas que trabalham com terapias holísticas, energ
 
 ### 👥 Pacientes
 - Cadastro completo com dados pessoais
-- Vinculação automática ao terapeuta (id: demo-user-001)
+- Vinculação automática ao terapeuta (ID do usuário autenticado no Firebase)
 - Associação persistente em Firestore + localStorage
 - Informações: nome, email, telefone, endereço, data nascimento, gênero, queixa principal
 

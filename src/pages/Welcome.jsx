@@ -1,24 +1,62 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
+import { loginWithGoogle } from '@/api/firebaseAuth';
 import { User } from '@/api/entities';
 import { motion } from 'framer-motion';
 import { Sparkles, Shield, Zap, Heart, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from "sonner";
+import { onAuthChange, getCurrentUser } from '@/api/firebaseAuth';
 
 export default function WelcomePage() {
     const [isLoading, setIsLoading] = useState(false);
     const navigate = useNavigate();
     
+    // Verificar se já está autenticado (com proteção contra loop)
+    const hasRedirectedRef = useRef(false);
+    useEffect(() => {
+        const unsubscribe = onAuthChange(async (firebaseUser) => {
+            if (firebaseUser && !hasRedirectedRef.current) {
+                console.log('👤 Usuário já autenticado, verificando perfil...');
+                hasRedirectedRef.current = true;
+                try {
+                    const terapeutaProfile = await User.me();
+                    if (terapeutaProfile) {
+                        console.log('✅ Perfil encontrado, redirecionando...');
+                        navigate('/Dashboard');
+                    } else {
+                        console.log('⚠️ Perfil não encontrado (provavelmente erro de permissões)');
+                        hasRedirectedRef.current = false; // Permitir tentar novamente
+                    }
+                } catch (error) {
+                    console.error('❌ Erro ao verificar perfil:', error);
+                    hasRedirectedRef.current = false; // Permitir tentar novamente
+                    if (error.message?.includes('permissions') || error.code === 'permission-denied') {
+                        alert('❌ Configure as regras do Firestore!\n\nVeja: CONFIGURAR_FIRESTORE_RULES.md');
+                    }
+                }
+            } else if (!firebaseUser) {
+                hasRedirectedRef.current = false; // Reset quando deslogar
+            }
+        });
+        return unsubscribe;
+    }, [navigate]);
+    
     const handleLogin = async () => {
         setIsLoading(true);
         try {
-            console.log('🔄 Iniciando login...');
-            const result = await User.login();
-            console.log('✅ Login bem-sucedido:', result);
+            console.log('🔄 Iniciando login com Google...');
+            
+            // Fazer login com Google via Firebase
+            const firebaseUser = await loginWithGoogle();
+            console.log('✅ Login Firebase bem-sucedido:', firebaseUser);
+            
+            // Criar/buscar perfil de terapeuta (isso é feito automaticamente em User.me())
+            const terapeutaProfile = await User.me();
+            console.log('✅ Perfil de terapeuta:', terapeutaProfile);
             
             toast.success("Bem-vindo(a) ao APP 5D!", {
-                description: "Sua jornada quântica está prestes a começar.",
+                description: `${terapeutaProfile?.full_name || 'Terapeuta'}, sua jornada quântica está prestes a começar.`,
                 duration: 3000,
             });
             
@@ -29,7 +67,7 @@ export default function WelcomePage() {
         } catch (error) {
             console.error("❌ Login failed", error);
             toast.error("Erro ao fazer login", {
-                description: "Por favor, tente novamente.",
+                description: error.message || "Por favor, tente novamente.",
             });
             setIsLoading(false);
         }

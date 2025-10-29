@@ -27,7 +27,7 @@ export default function PacientesPage() {
     const [currentUser, setCurrentUser] = useState(null); // Estado para armazenar o usuário atual
 
     const fetchPacientes = async (user) => {
-        if (!user) { // Se não houver usuário, não busca pacientes
+        if (!user || !user.id) { // Se não houver usuário, não busca pacientes
             console.log('⚠️ Nenhum usuário fornecido, limpando lista de pacientes');
             setIsLoading(false);
             setPacientes([]);
@@ -39,18 +39,42 @@ export default function PacientesPage() {
         
         setIsLoading(true);
         try {
-            // CORREÇÃO: Filtrar pacientes por terapeuta_id
+            // Filtrar pacientes por terapeuta_id
             const listaPacientes = await Paciente.filter({ terapeuta_id: user.id }, '-created_date');
             console.log('✅ Pacientes encontrados:', listaPacientes.length);
             if (listaPacientes.length > 0) {
                 console.log('📋 Primeiro paciente:', listaPacientes[0]);
+            } else {
+                console.log('ℹ️ Nenhum paciente cadastrado ainda. Isso é normal para um novo terapeuta.');
             }
             setPacientes(listaPacientes);
         } catch (error) {
             console.error('❌ Erro ao buscar pacientes:', error);
+            console.error('📋 Detalhes do erro:', {
+                code: error.code,
+                message: error.message,
+                terapeuta_id: user?.id
+            });
             setPacientes([]);
-            // Em caso de erro, garantir que o loading pare
-            alert('Erro ao carregar pacientes. Por favor, recarregue a página.');
+            
+            // Só mostrar alert para erros de permissão (erro real)
+            // Não mostrar para lista vazia ou outros erros menores
+            if (error.code === 'permission-denied' || error.message?.includes('permission') || error.message?.includes('Missing or insufficient')) {
+                const mensagemErro = '❌ Erro de Permissões no Firestore!\n\n' +
+                    '📋 Ação necessária:\n' +
+                    '1. Abra o Firebase Console\n' +
+                    '2. Vá em Firestore Database → Rules\n' +
+                    '3. Cole as regras do arquivo: REGRAS_FIRESTORE_COMPLETAS.txt\n' +
+                    '4. Clique em "Publicar"\n' +
+                    '5. Recarregue esta página\n\n' +
+                    'Ou siga as instruções em: CONFIGURAR_FIRESTORE_RULES.md';
+                
+                alert(mensagemErro);
+            } else {
+                // Para outros erros, logar mas não incomodar o usuário com alert
+                // a menos que seja um erro crítico
+                console.warn('⚠️ Erro ao buscar pacientes (não crítico):', error);
+            }
         } finally {
             // Forçar o loading para false após um tempo
             setTimeout(() => {
@@ -89,35 +113,86 @@ export default function PacientesPage() {
     };
 
     const handleSavePaciente = async (data) => {
-        if (!currentUser) {
-            console.error("❌ Erro: Usuário atual não encontrado. Não é possível salvar o paciente.");
-            alert('Erro: Você precisa estar logado para adicionar pacientes.');
+        if (!currentUser || !currentUser.id) {
+            console.error("❌ Erro: Usuário atual não encontrado ou sem ID.");
+            alert('❌ Erro: Você precisa estar logado para adicionar pacientes.\n\nFaça logout e login novamente.');
             return;
         }
 
         console.log('💾 Salvando paciente para terapeuta:', currentUser.id);
         console.log('📋 Dados do terapeuta atual:', currentUser);
+        console.log('📝 Dados do formulário:', data);
 
-        if (editingPaciente) {
-            // Se estiver editando, mantenha o terapeuta_id original
-            console.log('✏️ Editando paciente existente:', editingPaciente.id);
-            console.log('🔗 Mantendo terapeuta_id:', editingPaciente.terapeuta_id);
-            await Paciente.update(editingPaciente.id, { ...data, terapeuta_id: editingPaciente.terapeuta_id });
-            console.log('✅ Paciente atualizado com sucesso');
-        } else {
-            // Se for novo, associe ao terapeuta atual
-            const dataToSave = { ...data, terapeuta_id: currentUser.id };
-            console.log('➕ Criando novo paciente associado ao terapeuta:', currentUser.id);
-            console.log('📦 Dados completos:', dataToSave);
-            const createdPaciente = await Paciente.create(dataToSave);
-            console.log('✅ Paciente criado com sucesso:', createdPaciente);
-            console.log('🔗 Conexão terapeuta-paciente estabelecida:', {
-                terapeuta_id: currentUser.id,
-                paciente_id: createdPaciente.id
+        try {
+            if (editingPaciente) {
+                // Se estiver editando, mantenha o terapeuta_id original
+                console.log('✏️ Editando paciente existente:', editingPaciente.id);
+                console.log('🔗 Mantendo terapeuta_id:', editingPaciente.terapeuta_id);
+                await Paciente.update(editingPaciente.id, { ...data, terapeuta_id: editingPaciente.terapeuta_id });
+                console.log('✅ Paciente atualizado com sucesso');
+                alert(`✅ Paciente "${data.nome}" atualizado com sucesso!`);
+            } else {
+                // Se for novo, associe ao terapeuta atual
+                const dataToSave = { ...data, terapeuta_id: currentUser.id };
+                console.log('➕ Criando novo paciente associado ao terapeuta:', currentUser.id);
+                console.log('📦 Dados completos a serem salvos:', {
+                    nome: dataToSave.nome,
+                    email: dataToSave.email,
+                    terapeuta_id: dataToSave.terapeuta_id,
+                    ...dataToSave
+                });
+                
+                // Validar terapeuta_id antes de criar
+                if (!dataToSave.terapeuta_id) {
+                    throw new Error('Terapeuta ID não encontrado. Faça login novamente.');
+                }
+                
+                console.log('🔄 Chamando Paciente.create...');
+                const createdPaciente = await Paciente.create(dataToSave);
+                console.log('✅ Paciente criado com sucesso:', createdPaciente);
+                console.log('🔗 Conexão terapeuta-paciente estabelecida:', {
+                    terapeuta_id: currentUser.id,
+                    paciente_id: createdPaciente.id,
+                    paciente_nome: createdPaciente.nome
+                });
+                alert(`✅ Paciente "${data.nome}" cadastrado com sucesso!`);
+            }
+            
+            setIsFormOpen(false); // Close the form after saving
+            console.log('🔄 Atualizando lista de pacientes...');
+            await fetchPacientes(currentUser); // Refresh the list of patients, passando o usuário atual
+            console.log('✅ Lista de pacientes atualizada');
+        } catch (error) {
+            console.error('❌ Erro ao salvar paciente:', error);
+            console.error('📋 Detalhes do erro:', {
+                code: error.code,
+                message: error.message,
+                terapeuta_id: currentUser?.id,
+                stack: error.stack
             });
+            
+            // Mensagens de erro mais específicas
+            let mensagemErro = 'Erro ao salvar paciente. Tente novamente.';
+            
+            if (error.code === 'permission-denied' || error.message?.includes('permission') || error.message?.includes('Missing or insufficient')) {
+                mensagemErro = '❌ Erro de Permissões no Firestore!\n\n' +
+                    '📋 Ação necessária:\n' +
+                    '1. Abra o Firebase Console\n' +
+                    '2. Vá em Firestore Database → Rules\n' +
+                    '3. Cole as regras do arquivo: REGRAS_FIRESTORE_COMPLETAS.txt\n' +
+                    '4. Clique em "Publicar"\n' +
+                    '5. Recarregue esta página\n\n' +
+                    'Ou siga as instruções em: CONFIGURAR_FIRESTORE_RULES.md';
+            } else if (error.message?.includes('terapeuta_id') || !currentUser?.id) {
+                mensagemErro = '❌ Erro: Terapeuta não identificado.\n\nFaça logout e login novamente.';
+            } else if (error.message) {
+                mensagemErro = `❌ Erro: ${error.message}`;
+            }
+            
+            alert(mensagemErro);
+            // Não fechar o formulário em caso de erro para permitir corrigir
+            throw error; // Re-lançar para o formulário saber que houve erro
         }
-        setIsFormOpen(false); // Close the form after saving
-        fetchPacientes(currentUser); // Refresh the list of patients, passando o usuário atual
     };
 
     const handleDeletePaciente = async (pacienteId) => {
@@ -192,7 +267,16 @@ export default function PacientesPage() {
                                     layout
                                 >
                                     {/* Link to patient details page */}
-                                    <Link to={createPageUrl(`DetalhesPaciente?id=${paciente.id}`)}>
+                                    <Link 
+                                        to={createPageUrl(`DetalhesPaciente?id=${paciente.id}`)}
+                                        onClick={() => {
+                                            console.log('🔗 Navegando para detalhes do paciente:', {
+                                                pacienteId: paciente.id,
+                                                pacienteNome: paciente.nome,
+                                                url: createPageUrl(`DetalhesPaciente?id=${paciente.id}`)
+                                            });
+                                        }}
+                                    >
                                         <QuantumCard>
                                             <CardHeader className="flex flex-row justify-between items-start">
                                                 <CardTitle className="flex items-center gap-3 text-gray-800">

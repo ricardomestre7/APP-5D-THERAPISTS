@@ -71,7 +71,8 @@ export default function RelatoriosPage() {
                 pacienteNome: paciente?.nome || 'Paciente',
                 analise,
                 terapeutaNome: currentUser?.full_name || 'Terapeuta',
-                sessoes: sessoes // Passa as sessões para o PDF
+                sessoes: sessoes,
+                terapias: terapias // Passar terapias para renderizar gráficos corretamente
             });
             
         } catch (error) {

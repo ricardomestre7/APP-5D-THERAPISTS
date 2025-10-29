@@ -1,15 +1,16 @@
 
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Home, Users, BarChart3, Library, Sparkles, Loader2, LogOut, Menu, BookOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-// Base44 removido
 import ChatbotFloating from '@/components/ChatbotFloating';
 import { motion } from 'framer-motion';
+import { User } from '@/api/entities';
+import { onAuthChange, logout as firebaseLogout } from '@/api/firebaseAuth';
 
 const navItems = [
     { name: 'Painel', icon: Home, page: 'Dashboard', color: 'text-blue-500' },
@@ -105,6 +106,8 @@ export default function Layout({ children, currentPageName }) {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
+    const redirectCountRef = useRef(0);
+    const maxRedirects = 2;
 
     useEffect(() => {
         loadUser();
@@ -113,38 +116,79 @@ export default function Layout({ children, currentPageName }) {
     const loadUser = async () => {
         try {
             console.log('🔄 Carregando usuário no Layout...');
-            // Buscar usuário atual do localStorage
-            const savedUser = localStorage.getItem('5d_user_profile');
-            if (savedUser) {
-                const user = JSON.parse(savedUser);
-                console.log('👤 Usuário encontrado:', user);
-                setUser(user);
-            } else {
-                console.log('⚠️ Nenhum usuário encontrado, redirecionando para login...');
-                // Não redireciona automaticamente, permite acesso demo
-                setUser({ 
-                    full_name: 'Usuário Demo', 
-                    email: 'demo@example.com',
-                    id: 'demo-user-001'
-                });
+            
+            // Prevenir loop infinito
+            if (redirectCountRef.current >= maxRedirects) {
+                console.error('🛑 Loop infinito detectado, parando redirecionamentos');
+                setLoading(false);
+                alert('Erro de configuração: Configure as regras do Firestore no Firebase Console. Veja CONFIGURAR_FIRESTORE_RULES.md');
+                return;
             }
+            
+            // Verificar autenticação Firebase
+            const unsubscribe = onAuthChange(async (firebaseUser) => {
+                if (!firebaseUser) {
+                    console.log('⚠️ Nenhum usuário autenticado, redirecionando para login...');
+                    redirectCountRef.current = 0; // Reset ao redirecionar para Welcome
+                    navigate(createPageUrl('Welcome'));
+                    return;
+                }
+                
+                try {
+                    // Buscar perfil de terapeuta
+                    const terapeutaProfile = await User.me();
+                    if (terapeutaProfile) {
+                        console.log('👤 Terapeuta encontrado:', terapeutaProfile);
+                        setUser(terapeutaProfile);
+                        redirectCountRef.current = 0; // Reset em caso de sucesso
+                    } else {
+                        console.log('⚠️ Perfil não encontrado, redirecionando...');
+                        redirectCountRef.current++;
+                        if (redirectCountRef.current < maxRedirects) {
+                            navigate(createPageUrl('Welcome'));
+                        }
+                    }
+                } catch (error) {
+                    console.error('❌ Erro ao carregar perfil:', error);
+                    redirectCountRef.current++;
+                    
+                    // Se for erro de permissão, mostrar mensagem clara
+                    if (error.message?.includes('permissions') || error.code === 'permission-denied') {
+                        console.error('🔐 ERRO DE PERMISSÃO: Configure as regras do Firestore!');
+                        alert('❌ Erro de Permissões!\n\nConfigure as regras do Firestore no Firebase Console.\n\nVeja o arquivo: CONFIGURAR_FIRESTORE_RULES.md\n\nO loop será interrompido agora.');
+                        redirectCountRef.current = maxRedirects; // Parar loop
+                    } else if (redirectCountRef.current < maxRedirects) {
+                        navigate(createPageUrl('Welcome'));
+                    }
+                } finally {
+                    setLoading(false);
+                }
+            });
+            
+            // Retornar função de limpeza
+            return () => unsubscribe();
         } catch (error) {
             console.error('❌ Erro ao carregar usuário:', error);
-            // Em caso de erro, permite continuar com usuário demo
-            setUser({ 
-                full_name: 'Usuário Demo', 
-                email: 'demo@example.com',
-                id: 'demo-user-001'
-            });
-        } finally {
+            redirectCountRef.current++;
+            if (redirectCountRef.current < maxRedirects) {
+                navigate(createPageUrl('Welcome'));
+            }
             setLoading(false);
-            console.log('✅ Carregamento de usuário concluído');
         }
     };
 
     const handleLogout = async () => {
-        // Base44 removido - implementar logout
-        navigate(createPageUrl('Welcome'));
+        try {
+            await firebaseLogout();
+            localStorage.removeItem('5d_user_profile'); // Limpar localStorage também
+            console.log('✅ Logout realizado com sucesso');
+            navigate(createPageUrl('Welcome'));
+        } catch (error) {
+            console.error('❌ Erro ao fazer logout:', error);
+            // Redirecionar mesmo com erro
+            localStorage.removeItem('5d_user_profile');
+            navigate(createPageUrl('Welcome'));
+        }
     };
 
     if (loading) {

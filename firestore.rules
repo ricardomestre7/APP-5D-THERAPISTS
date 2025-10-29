@@ -1,0 +1,290 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ========== HELPER FUNCTIONS ==========
+
+    // Verifica se o usuário está autenticado
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Verifica se o ID fornecido corresponde ao UID do usuário autenticado
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Verifica se o documento (novo ou existente) pertence ao terapeuta autenticado
+    // Usado para coleções que têm o campo 'terapeuta_id'
+    function isTherapistOwner(docData) {
+      return isAuthenticated() && docData.terapeuta_id == request.auth.uid;
+    }
+
+    // Verifica se um paciente específico pertence ao terapeuta autenticado
+    function doesPatientBelongToTherapist(pacienteId, terapeutaId) {
+      return isAuthenticated() &&
+             exists(/databases/$(database)/documents/pacientes/$(pacienteId)) &&
+             get(/databases/$(database)/documents/pacientes/$(pacienteId)).data.terapeuta_id == terapeutaId;
+    }
+
+    // ========== REGRAS PRINCIPAIS APP 5D (Novo Sistema) ==========
+
+    // Coleção: terapeutas
+    // Cada terapeuta só pode gerir o seu próprio perfil.
+    match /terapeutas/{terapeutaId} {
+      allow read, create, update, delete: if isOwner(terapeutaId);
+    }
+
+    // Coleção: pacientes
+    // O terapeuta pode gerir (CRUD) apenas os seus próprios pacientes.
+    match /pacientes/{pacienteId} {
+      // Leitura: Permitida se for o terapeuta dono OU se o documento for novo (para queries com filtro)
+      allow get: if isAuthenticated() && (
+        resource == null || 
+        isTherapistOwner(resource.data)
+      );
+      
+      // List: Permitida para qualquer terapeuta autenticado (a query DEVE filtrar por terapeuta_id)
+      allow list: if isAuthenticated();
+
+      // Criação: Permitida se o terapeuta_id no novo documento for o do usuário autenticado
+      allow create: if isAuthenticated() && 
+                       isTherapistOwner(request.resource.data);
+
+      // Atualização: Permitida se o paciente pertence ao terapeuta E o terapeuta_id não muda
+      allow update: if isAuthenticated() && 
+                       resource != null &&
+                       isTherapistOwner(resource.data) &&  // Garante que está a alterar um paciente seu
+                       isTherapistOwner(request.resource.data); // Garante que não está a mudar o dono
+
+      // Exclusão: Permitida se o paciente pertence ao terapeuta
+      allow delete: if isAuthenticated() && 
+                       resource != null &&
+                       isTherapistOwner(resource.data);
+    }
+
+    // Coleção: sessoes
+    // O terapeuta pode gerir (CRUD) apenas sessões dos seus próprios pacientes.
+    match /sessoes/{sessaoId} {
+      // Leitura: Permitida se a sessão pertence a um paciente do terapeuta.
+      allow get: if isAuthenticated() && (
+        resource == null ||
+        (resource.data.paciente_id != null && 
+         doesPatientBelongToTherapist(resource.data.paciente_id, request.auth.uid))
+      );
+      allow list: if isAuthenticated(); // Query DEVE incluir 'where("terapeuta_id", "==", request.auth.uid)'
+
+      // Escrita: Permitida se o terapeuta_id E o paciente_id são consistentes com o terapeuta autenticado.
+      allow create: if isAuthenticated() &&
+                       isTherapistOwner(request.resource.data) &&
+                       request.resource.data.paciente_id != null &&
+                       doesPatientBelongToTherapist(request.resource.data.paciente_id, request.auth.uid);
+      
+      allow update: if isAuthenticated() &&
+                       resource != null &&
+                       resource.data.paciente_id != null &&
+                       doesPatientBelongToTherapist(resource.data.paciente_id, request.auth.uid) && // Sessão original é sua
+                       isTherapistOwner(request.resource.data) && // Novo terapeuta_id é seu
+                       request.resource.data.paciente_id != null &&
+                       doesPatientBelongToTherapist(request.resource.data.paciente_id, request.auth.uid); // Novo paciente_id é seu
+      
+      allow delete: if isAuthenticated() &&
+                       resource != null &&
+                       resource.data.paciente_id != null &&
+                       doesPatientBelongToTherapist(resource.data.paciente_id, request.auth.uid);
+    }
+
+    // Coleção: diario_bem_estar
+    // Similar a 'sessoes', ligado a um paciente do terapeuta.
+    match /diario_bem_estar/{diarioId} {
+      allow get: if isAuthenticated() && (
+        resource == null ||
+        (resource.data.paciente_id != null && 
+         doesPatientBelongToTherapist(resource.data.paciente_id, request.auth.uid))
+      );
+      allow list: if isAuthenticated(); // Query DEVE incluir 'where("terapeuta_id", "==", request.auth.uid)'
+      
+      allow create: if isAuthenticated() &&
+                       isTherapistOwner(request.resource.data) &&
+                       request.resource.data.paciente_id != null &&
+                       doesPatientBelongToTherapist(request.resource.data.paciente_id, request.auth.uid);
+      
+      allow update: if isAuthenticated() &&
+                       resource != null &&
+                       resource.data.paciente_id != null &&
+                       doesPatientBelongToTherapist(resource.data.paciente_id, request.auth.uid) &&
+                       isTherapistOwner(request.resource.data) &&
+                       request.resource.data.paciente_id != null &&
+                       doesPatientBelongToTherapist(request.resource.data.paciente_id, request.auth.uid);
+      
+      allow delete: if isAuthenticated() &&
+                       resource != null &&
+                       resource.data.paciente_id != null &&
+                       doesPatientBelongToTherapist(resource.data.paciente_id, request.auth.uid);
+    }
+
+    // Coleção: praticas_recomendadas
+    // Similar a 'sessoes', ligado a um paciente do terapeuta.
+    match /praticas_recomendadas/{praticaId} {
+      allow get: if isAuthenticated() && (
+        resource == null ||
+        (resource.data.paciente_id != null && 
+         doesPatientBelongToTherapist(resource.data.paciente_id, request.auth.uid))
+      );
+      allow list: if isAuthenticated(); // Query DEVE incluir 'where("terapeuta_id", "==", request.auth.uid)'
+      
+      allow create: if isAuthenticated() &&
+                       isTherapistOwner(request.resource.data) &&
+                       request.resource.data.paciente_id != null &&
+                       doesPatientBelongToTherapist(request.resource.data.paciente_id, request.auth.uid);
+      
+      allow update: if isAuthenticated() &&
+                       resource != null &&
+                       resource.data.paciente_id != null &&
+                       doesPatientBelongToTherapist(resource.data.paciente_id, request.auth.uid) &&
+                       isTherapistOwner(request.resource.data) &&
+                       request.resource.data.paciente_id != null &&
+                       doesPatientBelongToTherapist(request.resource.data.paciente_id, request.auth.uid);
+      
+      allow delete: if isAuthenticated() &&
+                       resource != null &&
+                       resource.data.paciente_id != null &&
+                       doesPatientBelongToTherapist(resource.data.paciente_id, request.auth.uid);
+    }
+
+    // Coleção: agendamentos
+    // Similar a 'sessoes', ligado a um paciente OU apenas ao terapeuta (depende da sua estrutura).
+    // Assumindo que está ligado a um paciente:
+    match /agendamentos/{agendamentoId} {
+      allow get: if isAuthenticated() && (
+        resource == null ||
+        (resource.data.paciente_id != null && 
+         doesPatientBelongToTherapist(resource.data.paciente_id, request.auth.uid))
+      );
+      allow list: if isAuthenticated(); // Query DEVE incluir 'where("terapeuta_id", "==", request.auth.uid)'
+      
+      allow create: if isAuthenticated() &&
+                       isTherapistOwner(request.resource.data) &&
+                       request.resource.data.paciente_id != null &&
+                       doesPatientBelongToTherapist(request.resource.data.paciente_id, request.auth.uid);
+      
+      allow update: if isAuthenticated() &&
+                       resource != null &&
+                       resource.data.paciente_id != null &&
+                       doesPatientBelongToTherapist(resource.data.paciente_id, request.auth.uid) &&
+                       isTherapistOwner(request.resource.data) &&
+                       request.resource.data.paciente_id != null &&
+                       doesPatientBelongToTherapist(request.resource.data.paciente_id, request.auth.uid);
+      
+      allow delete: if isAuthenticated() &&
+                       resource != null &&
+                       resource.data.paciente_id != null &&
+                       doesPatientBelongToTherapist(resource.data.paciente_id, request.auth.uid);
+    }
+
+    // ========== BIBLIOTECAS (Read-Only para Terapeutas) ==========
+    // Terapeutas podem ler, mas não modificar as bibliotecas centrais.
+
+    match /terapias/{terapiaId} {
+      allow get, list: if isAuthenticated();
+      allow write: if false; // Ninguém (exceto talvez admin via console/backend) pode escrever
+    }
+    
+    match /oleos_essenciais/{oleoId} {
+      allow get, list: if isAuthenticated();
+      allow write: if false;
+    }
+    
+    match /cristais/{cristalId} {
+      allow get, list: if isAuthenticated();
+      allow write: if false;
+    }
+    
+    match /ervas_plantas/{ervaId} {
+      allow get, list: if isAuthenticated();
+      allow write: if false;
+    }
+
+    // Adicione aqui para 'praticas_quanticas' se for uma biblioteca similar
+    // match /praticas_quanticas/{praticaQId} {
+    //   allow get, list: if isAuthenticated();
+    //   allow write: if false;
+    // }
+
+    // ========== COMPATIBILIDADE (Sistema Antigo - REVER NECESSIDADE) ==========
+    // Mantenha estas regras SE AINDA USA estas coleções ou o sistema de 'roles'
+    // Considere migrar totalmente para a nova estrutura se possível.
+
+    // Helper function LEGADA: obtém role do usuário da coleção ANTIGA 'users'
+    function getUserRole_LEGACY() {
+      let userDocPath = /databases/$(database)/documents/users/$(request.auth.uid);
+      // Verifica se o documento existe antes de tentar aceder 'data'
+      return exists(userDocPath) ? get(userDocPath).data.role : null;
+    }
+
+    // Coleção: users (sistema antigo)
+    match /users/{userId} {
+      // Permite ao próprio terapeuta ler/escrever SE tiver a role 'therapist'
+      allow read, update: if isOwner(userId) && getUserRole_LEGACY() == 'therapist';
+      // Permite ao admin ler/escrever
+      allow read, write: if getUserRole_LEGACY() == 'admin';
+      // Permite ao tester ler
+      allow read: if getUserRole_LEGACY() == 'tester';
+      // Permite ao próprio paciente ler SE tiver a role 'patient'
+      allow read: if isOwner(userId) && getUserRole_LEGACY() == 'patient';
+      // Nega outras escritas explicitamente
+      allow create, delete: if false;
+    }
+
+    // Coleção: patients (sistema antigo)
+    match /patients/{patientId} {
+      // Permite ao terapeuta ler/escrever SE o paciente for seu E ele tiver a role
+      allow read, write: if getUserRole_LEGACY() == 'therapist'
+                           && resource != null &&
+                           resource.data.therapistUid == request.auth.uid;
+      // Permite ao paciente ler seu próprio perfil (se tiver role 'patient')
+      // Nota: Esta regra assume que o ID do documento é o UID do paciente
+      allow read: if isOwner(patientId) && getUserRole_LEGACY() == 'patient';
+      // Nega outras escritas
+      allow create, delete: if false; // Create pode ser necessário dependendo do fluxo
+    }
+
+    // Coleção: reports (sistema antigo)
+    match /reports/{reportId} {
+      // Permite ao terapeuta ler/escrever SE o relatório for seu E ele tiver a role
+      allow read, write: if getUserRole_LEGACY() == 'therapist'
+                           && resource != null &&
+                           resource.data.therapistUid == request.auth.uid;
+      // Permite ao paciente ler SE o relatório for dele E estiver partilhado
+      allow read: if isAuthenticated()
+                     && resource != null &&
+                     resource.data.patientUid == request.auth.uid
+                     && resource.data.sharedWithPatient == true;
+      // Nega outras escritas
+      allow create, delete: if false;
+    }
+
+    // Coleção: invites (sistema antigo)
+    match /invites/{inviteId} {
+      allow create: if getUserRole_LEGACY() in ['admin', 'therapist'];
+      // Leitura: Se o email no convite corresponde ao email do usuário autenticado (da coleção 'users')
+      allow read: if exists(/databases/$(database)/documents/users/$(request.auth.uid))
+                     && resource != null &&
+                     resource.data.email == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.email;
+      // Nega outras operações
+      allow update, delete: if false;
+    }
+
+    // Coleção: config (sistema antigo)
+    match /config/{docId} {
+      allow read, write: if getUserRole_LEGACY() == 'admin';
+    }
+
+    // ========== NEGAÇÃO PADRÃO ==========
+    // Nega acesso a qualquer coleção não especificada acima
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+  } // Fim do match /databases/{database}/documents
+} // Fim do service cloud.firestore
