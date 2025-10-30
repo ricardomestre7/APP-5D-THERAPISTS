@@ -663,7 +663,7 @@ function generateHTMLReport(data) {
                 </p>
             </div>
             <div class="campos-grid">
-                <div class="campo-card">
+                    <div class="campo-card">
                     <div class="campo-nome">Total de Sessões</div>
                     <div class="campo-valor">${analise.totalSessoes || sessoes.length}</div>
                     <div class="campo-status">Sessões realizadas</div>
@@ -939,6 +939,14 @@ function generateHTMLReport(data) {
         ${analise ? `
         <div class="secao">
             <div class="secao-titulo">💡 Recomendações Terapêuticas</div>
+            <div style="background: #f0f9ff; border-left: 4px solid #3b82f6; padding: 15px; margin-bottom: 20px; border-radius: 4px;">
+                <p style="color: #1e40af; font-size: 14px; line-height: 1.8; margin: 0;">
+                    <strong>Sobre as Recomendações:</strong> As orientações abaixo foram geradas com base na análise quantitativa dos dados coletados durante as sessões. 
+                    Elas são sugestões práticas e específicas, fundamentadas nos padrões identificados. Cada recomendação inclui explicações detalhadas sobre o que fazer, 
+                    como fazer e por que fazer, para que você possa aplicá-las de forma efetiva no seu trabalho terapêutico. 
+                    Adapte estas orientações ao seu conhecimento clínico e às particularidades de cada paciente.
+                </p>
+            </div>
             <div class="observacoes">
                 ${getRecommendations(analise)}
             </div>
