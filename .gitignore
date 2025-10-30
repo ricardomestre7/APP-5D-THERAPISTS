@@ -58,3 +58,4 @@ ui-debug.log
 
 # Functions (node_modules já está ignorado)
 functions/node_modules
+.vercel

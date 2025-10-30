@@ -195,10 +195,23 @@ exports.gerarPDFRelatorio = functions.https.onCall(async (data, context) => {
     // Converter buffer para base64 para enviar via Firebase Functions
     const pdfBase64 = pdfBuffer.toString('base64');
 
+    // Sanitizar nome do arquivo também
+    const sanitizeFileName = (name) => {
+      return String(name || 'paciente')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+        .replace(/[^a-z0-9]/gi, '_')
+        .substring(0, 50);
+    };
+    
+    const fileName = `relatorio_quantico_${sanitizeFileName(data.pacienteNome)}_${new Date().toISOString().split('T')[0]}.pdf`;
+    
+    console.log('✅ PDF gerado com sucesso! Tamanho:', pdfBuffer.length, 'bytes, Nome arquivo:', fileName);
+    
     return {
       success: true,
       pdf: pdfBase64,
-      filename: `relatorio_quantico_${data.pacienteNome.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`
+      filename: fileName
     };
 
   } catch (error) {

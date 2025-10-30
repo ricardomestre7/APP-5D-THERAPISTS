@@ -9,6 +9,13 @@ export async function gerarPDFRelatorio({ pacienteNome, analise, terapeutaNome, 
     // Tentar primeiro com Puppeteer no backend (alta qualidade)
     try {
         console.log('🔄 Tentando gerar PDF via Puppeteer (backend)...');
+        console.log('📋 Dados enviados:', { 
+            pacienteNome: pacienteNome?.substring(0, 30), 
+            hasAnalise: !!analise,
+            sessoesCount: sessoes.length,
+            terapiasCount: Object.keys(terapias).length
+        });
+        
         await gerarPDFBackend({
             pacienteNome,
             analise,
@@ -16,16 +23,34 @@ export async function gerarPDFRelatorio({ pacienteNome, analise, terapeutaNome, 
             sessoes,
             terapias
         });
+        
         console.log('✅ PDF gerado com sucesso via Puppeteer!');
         return; // Sucesso, sair da função
     } catch (error) {
-        console.warn('⚠️ Falha ao gerar PDF via Puppeteer, usando fallback jsPDF:', error);
-        // Continuar para fallback jsPDF
+        console.error('❌ ERRO CRÍTICO na Cloud Function:', error);
+        console.error('📋 Detalhes do erro:', {
+            message: error.message,
+            code: error.code,
+            details: error.details,
+            stack: error.stack
+        });
+        
+        // NÃO usar fallback jsPDF - mostrar erro ao usuário e pedir para tentar novamente
+        const mensagemErro = `
+ERRO ao gerar PDF via Cloud Function.
+
+Por favor, tente novamente em alguns instantes.
+Se o problema persistir, verifique:
+1. Sua conexão com a internet
+2. Se você está autenticado no sistema
+3. Tente fazer logout e login novamente
+
+Erro técnico: ${error.message || 'Desconhecido'}
+        `.trim();
+        
+        alert(mensagemErro);
+        throw error; // Não continuar para fallback
     }
-    
-    // FALLBACK: Usar jsPDF local (qualidade limitada mas funciona)
-    console.log('🔄 Gerando PDF localmente com jsPDF (fallback)...');
-    gerarPDFLocal({ pacienteNome, analise, terapeutaNome, sessoes });
 }
 
 /**
