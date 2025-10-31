@@ -5,7 +5,7 @@ import { gerarRelatorioPDF as gerarPDFBackend } from '@/api/functions';
  * Gera um PDF profissional do relatório quântico
  * Tenta usar Puppeteer (backend) primeiro, fallback para jsPDF (frontend)
  */
-export async function gerarPDFRelatorio({ pacienteNome, analise, terapeutaNome, sessoes = [], terapias = {} }) {
+export async function gerarPDFRelatorio({ pacienteNome, analise, terapeutaNome, sessoes = [], terapias = {}, canvasGraficos = [], imagensGraficos = [] }) {
     // Tentar primeiro com Puppeteer no backend (alta qualidade)
     try {
         console.log('🔄 Tentando gerar PDF via Puppeteer (backend)...');
@@ -35,34 +35,42 @@ export async function gerarPDFRelatorio({ pacienteNome, analise, terapeutaNome, 
             stack: error.stack
         });
         
-        // NÃO usar fallback jsPDF - mostrar erro ao usuário e pedir para tentar novamente
+        // Ativar fallback local automaticamente para não bloquear o usuário
         const mensagemErro = `
 ERRO ao gerar PDF via Cloud Function.
 
-Por favor, tente novamente em alguns instantes.
-Se o problema persistir, verifique:
-1. Sua conexão com a internet
-2. Se você está autenticado no sistema
-3. Tente fazer logout e login novamente
+Vou gerar uma versão local automaticamente (qualidade levemente reduzida).
+Se o problema persistir, verifique sua conexão e autenticação.
 
-Erro técnico: ${error.message || 'Desconhecido'}
+Detalhes: ${error.message || 'Desconhecido'}
         `.trim();
         
         alert(mensagemErro);
-        throw error; // Não continuar para fallback
+        try {
+            gerarPDFLocal({ pacienteNome, analise, terapeutaNome, sessoes, canvasGraficos, imagensGraficos });
+            return;
+        } catch (e) {
+            console.error('❌ Falha também no fallback local jsPDF:', e);
+            throw e;
+        }
     }
 }
 
 /**
  * Geração local com jsPDF (fallback quando Puppeteer não disponível)
  */
-function gerarPDFLocal({ pacienteNome, analise, terapeutaNome, sessoes = [] }) {
-    const doc = new jsPDF();
-    let y = 20;
+function gerarPDFLocal({ pacienteNome, analise, terapeutaNome, sessoes = [], canvasGraficos = [], imagensGraficos = [] }) {
+    // Orientação paisagem para melhor visualização e impressão
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const larguraPagina = doc.internal.pageSize.getWidth();
+    const alturaPagina = doc.internal.pageSize.getHeight();
     const margemEsquerda = 20;
-    const larguraUtil = 170;
-    const larguraPagina = 210;
-    const alturaPagina = 297;
+    const margemTopo = 20;
+    const margemRodape = 20;
+    const larguraUtil = larguraPagina - (margemEsquerda * 2);
+    const limiteY = alturaPagina - margemRodape;
+    const centroX = larguraPagina / 2;
+    let y = margemTopo;
 
     // ========== CORES HARMONIOSAS ==========
     const corPrincipal = [139, 92, 246]; // Roxo
@@ -75,6 +83,55 @@ function gerarPDFLocal({ pacienteNome, analise, terapeutaNome, sessoes = [] }) {
     const corAzul = [59, 130, 246];
 
     // ========== FUNÇÕES AUXILIARES ==========
+    const calcularDimensoesProporcionais = (srcLargura, srcAltura, maxLargura, maxAltura, minLargura = 120, minAltura = 60) => {
+        if (!srcLargura || !srcAltura) {
+            // fallback 16:9
+            srcLargura = 16; srcAltura = 9;
+        }
+        const ratio = srcLargura / srcAltura;
+        let w = Math.min(maxLargura, Math.max(minLargura, maxAltura * ratio));
+        let h = w / ratio;
+        if (h > maxAltura) {
+            h = maxAltura;
+            w = h * ratio;
+        }
+        if (h < minAltura) {
+            h = minAltura;
+            w = h * ratio;
+        }
+        return { w, h };
+    };
+
+    const adicionarGraficoCanvas = (canvas) => {
+        if (!canvas) return;
+        const maxLargura = larguraUtil;
+        const maxAltura = Math.max(80, (alturaPagina - 2 * margemTopo) * 0.6);
+        const { w, h } = calcularDimensoesProporcionais(canvas.width, canvas.height, maxLargura, maxAltura);
+        if (y + h > limiteY) {
+            doc.addPage();
+            y = margemTopo;
+        }
+        const dataUrl = canvas.toDataURL('image/png');
+        const x = centroX - (w / 2);
+        doc.addImage(dataUrl, 'PNG', x, y, w, h);
+        y += h + 10;
+    };
+
+    const adicionarGraficoImagem = async (dataUrl) => {
+        if (!dataUrl) return;
+        // Não conseguimos dimensões naturais de forma síncrona sem carregar Image.
+        // Assumir 16:9 como padrão razoável quando forem dataURL prontos.
+        const maxLargura = larguraUtil;
+        const maxAltura = Math.max(80, (alturaPagina - 2 * margemTopo) * 0.6);
+        const { w, h } = calcularDimensoesProporcionais(16, 9, maxLargura, maxAltura);
+        if (y + h > limiteY) {
+            doc.addPage();
+            y = margemTopo;
+        }
+        const x = centroX - (w / 2);
+        doc.addImage(dataUrl, 'PNG', x, y, w, h);
+        y += h + 10;
+    };
     const adicionarTexto = (texto, tamanho = 10, negrito = false, cor = corTexto, alinhamento = 'left') => {
         doc.setFontSize(tamanho);
         doc.setTextColor(cor[0], cor[1], cor[2]);
@@ -82,20 +139,21 @@ function gerarPDFLocal({ pacienteNome, analise, terapeutaNome, sessoes = [] }) {
         
         const linhas = doc.splitTextToSize(texto, larguraUtil);
         linhas.forEach(linha => {
-            if (y > 260) {
+            if (y > (limiteY - 10)) {
                 doc.addPage();
-                y = 20;
+                y = margemTopo;
             }
-            doc.text(linha, margemEsquerda, y, { align: alinhamento });
-            y += tamanho * 0.5;
+            const xBase = alinhamento === 'center' ? centroX : alinhamento === 'right' ? (margemEsquerda + larguraUtil) : margemEsquerda;
+            doc.text(linha, xBase, y, { align: alinhamento });
+            y += Math.max(5, tamanho * 0.6);
         });
         y += 3;
     };
 
     const adicionarTituloSecao = (titulo) => {
-        if (y > 250) {
+        if (y > (limiteY - 20)) {
             doc.addPage();
-            y = 20;
+            y = margemTopo;
         }
         y += 10;
         
@@ -113,9 +171,9 @@ function gerarPDFLocal({ pacienteNome, analise, terapeutaNome, sessoes = [] }) {
     };
 
     const adicionarCaixaInfo = (label, valor, cor) => {
-        if (y > 260) {
+        if (y > (limiteY - 10)) {
             doc.addPage();
-            y = 20;
+            y = margemTopo;
         }
         
         // Borda colorida à esquerda
@@ -142,9 +200,9 @@ function gerarPDFLocal({ pacienteNome, analise, terapeutaNome, sessoes = [] }) {
     };
 
     const adicionarBarraProgresso = (campo, valor, maxValor = 10) => {
-        if (y > 260) {
+        if (y > (limiteY - 10)) {
             doc.addPage();
-            y = 20;
+            y = margemTopo;
         }
         
         const percentual = (valor / maxValor) * 100;
@@ -198,9 +256,9 @@ function gerarPDFLocal({ pacienteNome, analise, terapeutaNome, sessoes = [] }) {
         // Dados das sessões (últimas 8)
         const ultimasSessoes = sessoes.slice(0, 8);
         ultimasSessoes.forEach((sessao, index) => {
-            if (y > 270) {
+            if (y > (limiteY - 20)) {
                 doc.addPage();
-                y = 20;
+                y = margemTopo;
                 // Recabeçalho
                 doc.setFillColor(corPrincipal[0], corPrincipal[1], corPrincipal[2]);
                 doc.roundedRect(margemEsquerda, y, larguraUtil, 8, 2, 2, 'F');
@@ -282,9 +340,9 @@ function gerarPDFLocal({ pacienteNome, analise, terapeutaNome, sessoes = [] }) {
         
         // Dados dos campos
         Object.entries(analise.indicesPorCampo).forEach(([campo, dados], index) => {
-            if (y > 270) {
+            if (y > (limiteY - 20)) {
                 doc.addPage();
-                y = 20;
+                y = margemTopo;
                 // Recabeçalho
                 doc.setFillColor(corAzul[0], corAzul[1], corAzul[2]);
                 doc.roundedRect(margemEsquerda, y, larguraUtil, 8, 2, 2, 'F');
@@ -330,26 +388,26 @@ function gerarPDFLocal({ pacienteNome, analise, terapeutaNome, sessoes = [] }) {
     // ========== CAPA ==========
     // Fundo roxo gradiente (simulado)
     doc.setFillColor(139, 92, 246);
-    doc.rect(0, 0, larguraPagina, 80, 'F');
+    doc.rect(0, 0, larguraPagina, 60, 'F');
     
     doc.setFillColor(120, 80, 220);
-    doc.rect(0, 60, larguraPagina, 20, 'F');
+    doc.rect(0, 45, larguraPagina, 15, 'F');
     
     // Título
     doc.setFontSize(28);
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
-    doc.text('RELATÓRIO QUÂNTICO', 105, 35, { align: 'center' });
+    doc.text('RELATÓRIO QUÂNTICO', centroX, 28, { align: 'center' });
     
     doc.setFontSize(16);
     doc.setFont('helvetica', 'normal');
-    doc.text('Evolução Terapêutica', 105, 50, { align: 'center' });
+    doc.text('Evolução Terapêutica', centroX, 40, { align: 'center' });
     
     doc.setFontSize(12);
-    doc.text('Análise Profunda de Progresso Energético', 105, 65, { align: 'center' });
+    doc.text('Análise Profunda de Progresso Energético', centroX, 52, { align: 'center' });
     
     // Info do paciente
-    y = 100;
+    y = 80;
     doc.setTextColor(corTexto[0], corTexto[1], corTexto[2]);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
@@ -372,11 +430,11 @@ function gerarPDFLocal({ pacienteNome, analise, terapeutaNome, sessoes = [] }) {
     // Logo ou decoração
     doc.setDrawColor(255, 255, 255);
     doc.setLineWidth(3);
-    doc.circle(105, 180, 30, 'D'); // Círculo decorativo
+    doc.circle(centroX, alturaPagina - 40, 20, 'D'); // Círculo decorativo
     
     // ========== PÁGINA 2: RESUMO EXECUTIVO ==========
     doc.addPage();
-    y = 30;
+    y = margemTopo + 10;
     
     adicionarTituloSecao('📋 RESUMO EXECUTIVO');
     
@@ -389,15 +447,15 @@ function gerarPDFLocal({ pacienteNome, analise, terapeutaNome, sessoes = [] }) {
     // Círculo grande com score
     const scoreColor = analise.scoreGeral >= 70 ? corSucesso : analise.scoreGeral >= 50 ? corAtencao : corCritico;
     doc.setFillColor(scoreColor[0], scoreColor[1], scoreColor[2]);
-    doc.circle(60, y + 15, 25, 'F');
+    doc.circle(margemEsquerda + 40, y + 15, 20, 'F');
     
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(32);
     doc.setFont('helvetica', 'bold');
-    doc.text(String(analise.scoreGeral), 60, y + 20, { align: 'center' });
+    doc.text(String(analise.scoreGeral), margemEsquerda + 40, y + 20, { align: 'center' });
     
     doc.setFontSize(11);
-    doc.text('/100', 60, y + 27, { align: 'center' });
+    doc.text('/100', margemEsquerda + 40, y + 27, { align: 'center' });
     
     // Interpretação
     doc.setTextColor(corTexto[0], corTexto[1], corTexto[2]);
@@ -414,7 +472,7 @@ function gerarPDFLocal({ pacienteNome, analise, terapeutaNome, sessoes = [] }) {
         interpretacao = '⚠ ATENÇÃO - Necessita revisão do protocolo.';
         doc.setTextColor(corCritico[0], corCritico[1], corCritico[2]);
     }
-    doc.text(interpretacao, 100, y + 20);
+    doc.text(interpretacao, margemEsquerda + 90, y + 20);
     
     y += 50;
     
@@ -440,19 +498,34 @@ function gerarPDFLocal({ pacienteNome, analise, terapeutaNome, sessoes = [] }) {
             adicionarBarraProgresso(campo, valor);
         });
     }
+
+    // ========== PÁGINA 6: VISUALIZAÇÕES GRÁFICAS (TERAPIAS) ==========
+    if ((canvasGraficos && canvasGraficos.length) || (imagensGraficos && imagensGraficos.length)) {
+        doc.addPage();
+        y = margemTopo + 10;
+        adicionarTituloSecao('📈 VISUALIZAÇÕES GRÁFICAS (TERAPIAS)');
+
+        // Canvas tem prioridade por preservar proporção exata
+        if (Array.isArray(canvasGraficos)) {
+            canvasGraficos.forEach((cv) => adicionarGraficoCanvas(cv));
+        }
+        if (Array.isArray(imagensGraficos)) {
+            imagensGraficos.forEach((img) => { /* síncrono suficiente p/ jsPDF */ adicionarGraficoImagem(img); });
+        }
+    }
     
-    // ========== PÁGINA 6: CAMPOS CRÍTICOS ==========
+    // ========== PÁGINA 7: CAMPOS CRÍTICOS ==========
     if (analise.camposCriticos && analise.camposCriticos.length > 0) {
         doc.addPage();
-        y = 30;
+        y = margemTopo + 10;
         
         adicionarTituloSecao('⚠️ CAMPOS QUE NECESSITAM ATENÇÃO URGENTE');
         
         y += 5;
         analise.camposCriticos.forEach((critico) => {
-            if (y > 240) {
+            if (y > (limiteY - 40)) {
                 doc.addPage();
-                y = 30;
+                y = margemTopo + 10;
             }
             
             // Caixa de alerta vermelha
@@ -484,7 +557,7 @@ function gerarPDFLocal({ pacienteNome, analise, terapeutaNome, sessoes = [] }) {
     
     // ========== PÁGINA FINAL: RECOMENDAÇÕES ==========
     doc.addPage();
-    y = 30;
+    y = margemTopo + 10;
     
     adicionarTituloSecao('💡 RECOMENDAÇÕES TERAPÊUTICAS');
     
@@ -551,14 +624,15 @@ function gerarPDFLocal({ pacienteNome, analise, terapeutaNome, sessoes = [] }) {
         // Linha separadora
         doc.setDrawColor(200, 200, 200);
         doc.setLineWidth(0.5);
-        doc.line(margemEsquerda, 275, margemEsquerda + larguraUtil, 275);
+        const yRodape = alturaPagina - 15;
+        doc.line(margemEsquerda, yRodape, margemEsquerda + larguraUtil, yRodape);
         
         // Texto
         doc.setFontSize(8);
         doc.setTextColor(150, 150, 150);
-        doc.text(`Página ${i} de ${totalPages}`, margemEsquerda, 280);
-        doc.text('APP 5D Therapists - Documento Confidencial', 105, 280, { align: 'center' });
-        doc.text(new Date().toLocaleDateString('pt-BR'), margemEsquerda + larguraUtil, 280, { align: 'right' });
+        doc.text(`Página ${i} de ${totalPages}`, margemEsquerda, yRodape + 5);
+        doc.text('APP 5D Therapists - Documento Confidencial', centroX, yRodape + 5, { align: 'center' });
+        doc.text(new Date().toLocaleDateString('pt-BR'), margemEsquerda + larguraUtil, yRodape + 5, { align: 'right' });
     }
 
     // Fazer download
