@@ -253,12 +253,7 @@ function gerarPDFLocal({ pacienteNome, analise, terapeutaNome, sessoes = [], can
         
         y += 10;
         
-        // Dados das sessões (últimas 8)
-        const ultimasSessoes = sessoes.slice(0, 8);
-        ultimasSessoes.forEach((sessao, index) => {
-            if (y > (limiteY - 20)) {
-                doc.addPage();
-                y = margemTopo;
+        
                 // Recabeçalho
                 doc.setFillColor(corPrincipal[0], corPrincipal[1], corPrincipal[2]);
                 doc.roundedRect(margemEsquerda, y, larguraUtil, 8, 2, 2, 'F');
@@ -302,7 +297,12 @@ function gerarPDFLocal({ pacienteNome, analise, terapeutaNome, sessoes = [], can
             // Média
             doc.setFont('helvetica', 'bold');
             const numMedia = parseFloat(media);
-            let statusColor = corCritico;
+            let statusColor = corCritico;// Dados das sessões (últimas 8)
+        const ultimasSessoes = sessoes.slice(0, 8);
+        ultimasSessoes.forEach((sessao, index) => {
+            if (y > (limiteY - 20)) {
+                doc.addPage();
+                y = margemTopo;
             if (numMedia >= 7) statusColor = corSucesso;
             else if (numMedia >= 5) statusColor = corAtencao;
             
