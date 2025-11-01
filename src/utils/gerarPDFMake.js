@@ -1008,12 +1008,12 @@ export async function gerarPDFRelatorio({
         const resumoExecutivo = [
             { text: '', pageBreak: 'before' }, // Quebra antes (apenas se necessário)
             // Aplicar fundo decorativo na página
-            ...criarFundoDecorativo(1),
-            ...criarCabecalhoSecao(
+            ...garantirArray(criarFundoDecorativo(1), []),
+            ...garantirArray(criarCabecalhoSecao(
                 'RESUMO EXECUTIVO',
                 'Visão Geral da Evolução',
                 'Análise Consolidada dos Resultados Terapêuticos'
-            ),
+            ), []),
             // Conteúdo do resumo executivo
             {
                 // margin: [left, top, right, bottom]
@@ -1026,12 +1026,12 @@ export async function gerarPDFRelatorio({
         const insightsSecao = [
             { text: '', pageBreak: 'before' }, // Quebra antes (apenas se necessário)
             // Aplicar fundo decorativo na página
-            ...criarFundoDecorativo(2),
-            ...criarCabecalhoSecao(
+            ...garantirArray(criarFundoDecorativo(2), []),
+            ...garantirArray(criarCabecalhoSecao(
                 'INSIGHTS E OBSERVAÇÕES',
                 'Análise Interpretativa dos Resultados',
                 'Observações Detalhadas sobre a Evolução'
-            ),
+            ), []),
             {
                 // margin: [left, top, right, bottom]
                 margin: [0, 8, 0, 0], // [esquerda, superior, direita, inferior]
@@ -1087,12 +1087,12 @@ export async function gerarPDFRelatorio({
                 // Adicionar quebra de página
                 tabelaCampos.push({ text: '', pageBreak: 'before' });
                 // Aplicar fundo decorativo na página
-                tabelaCampos.push(...criarFundoDecorativo(3));
-                tabelaCampos.push(...criarCabecalhoSecao(
+                tabelaCampos.push(...garantirArray(criarFundoDecorativo(3), []));
+                tabelaCampos.push(...garantirArray(criarCabecalhoSecao(
                     'ANÁLISE DETALHADA POR CAMPO',
                     'Avaliação Individual dos Campos Energéticos',
                     'Análise Profunda de Cada Dimensão Avaliada'
-                ));
+                ), []));
                 
                 // Adicionar conteúdo da tabela (mais compacto)
                 tabelaCampos.push({
@@ -1253,12 +1253,12 @@ export async function gerarPDFRelatorio({
         if (ultimasSessoes.length > 0) {
             historicoSessoes.push({ text: '', pageBreak: 'before' });
             // Aplicar fundo decorativo na página
-            historicoSessoes.push(...criarFundoDecorativo(4));
-            historicoSessoes.push(...criarCabecalhoSecao(
+            historicoSessoes.push(...garantirArray(criarFundoDecorativo(4), []));
+            historicoSessoes.push(...garantirArray(criarCabecalhoSecao(
                 'HISTÓRICO DE SESSÕES',
                 'Registro Completo das Sessões Realizadas',
                 'Evolução Temporal das Intervenções Terapêuticas'
-            ));
+            ), []));
             historicoSessoes.push({
                 text: 'HISTÓRICO COMPLETO DE SESSÕES',
                 fontSize: 11,
@@ -1395,12 +1395,12 @@ export async function gerarPDFRelatorio({
         if (camposCriticos.length > 0) {
             camposCriticosSecao.push({ text: '', pageBreak: 'before' });
             // Aplicar fundo decorativo na página
-            camposCriticosSecao.push(...criarFundoDecorativo(5));
-            camposCriticosSecao.push(...criarCabecalhoSecao(
+            camposCriticosSecao.push(...garantirArray(criarFundoDecorativo(5), []));
+            camposCriticosSecao.push(...garantirArray(criarCabecalhoSecao(
                 'CAMPOS QUE NECESSITAM ATENÇÃO',
                 'Áreas Requerendo Intervenção Imediata',
                 'Priorização de Campos Energéticos Críticos'
-            ));
+            ), []));
             camposCriticosSecao.push({
                 text: 'CAMPOS QUE NECESSITAM ATENÇÃO URGENTE',
                 fontSize: 11,
@@ -1517,12 +1517,12 @@ export async function gerarPDFRelatorio({
                     pageBreak: 'before'
                 });
                 // Aplicar fundo decorativo na página de continuação
-                camposCriticosSecao.push(...criarFundoDecorativo(6));
-                camposCriticosSecao.push(...criarCabecalhoSecao(
+                camposCriticosSecao.push(...garantirArray(criarFundoDecorativo(6), []));
+                camposCriticosSecao.push(...garantirArray(criarCabecalhoSecao(
                     'CAMPOS CRÍTICOS (Continuação)',
                     'Áreas Requerendo Intervenção Imediata',
                     'Complemento da Análise de Campos Prioritários'
-                ));
+                ), []));
                 
                 // Continuar com os campos restantes em 2 colunas também
                 const camposRestantes = camposCriticos.slice(8).map((critico) => {
@@ -1616,7 +1616,7 @@ export async function gerarPDFRelatorio({
         // Quebra de página explícita sem margem extra
         recomendacoes.push({ text: '', pageBreak: 'before' });
         // Aplicar fundo decorativo na página
-        recomendacoes.push(...criarFundoDecorativo(7));
+        recomendacoes.push(...garantirArray(criarFundoDecorativo(7), []));
         
         // Cabeçalho com margem superior mínima para começar próximo ao topo
         recomendacoes.push({
@@ -1795,20 +1795,20 @@ export async function gerarPDFRelatorio({
             },
             content: [
                 // CAPA (página 1)
-                ...capa,
+                ...garantirArray(capa, []),
                 // RESUMO EXECUTIVO (página 2) - COM FUNDO
-                ...resumoExecutivo,
+                ...garantirArray(resumoExecutivo, []),
                 // INSIGHTS E OBSERVAÇÕES (página 3)
-                ...insightsSecao,
+                ...garantirArray(insightsSecao, []),
                 // TABELA DE CAMPOS (página 4)
-                ...tabelaCampos,
+                ...garantirArray(tabelaCampos, []),
                 // HISTÓRICO DE SESSÕES (página 5)
-                ...historicoSessoes,
+                ...garantirArray(historicoSessoes, []),
                 // CAMPOS CRÍTICOS (página 6+)
-                ...camposCriticosSecao,
+                ...garantirArray(camposCriticosSecao, []),
                 // RECOMENDAÇÕES (página final)
-                ...recomendacoes
-            ],
+                ...garantirArray(recomendacoes, [])
+            ].filter(item => item !== null && item !== undefined), // Remover valores null/undefined
             styles: {
                 // Estilos da Capa (cores holísticas azul/verde)
                 tituloCapa: {
