@@ -12,18 +12,48 @@ async function getPdfMake() {
     if (!pdfMakeInstance) {
         try {
             console.log('📦 Importando pdfmake...');
-            // Importação dinâmica - usar caminhos diretos que o Vite pode resolver
-            // Não usar external para garantir que o módulo seja incluído no bundle
-            const pdfMakeModule = await import('pdfmake/build/pdfmake');
-            const pdfFontsModule = await import('pdfmake/build/vfs_fonts');
+            
+            // Tentar múltiplas formas de importar para compatibilidade
+            let pdfMakeModule, pdfFontsModule;
+            
+            try {
+                // Tentativa 1: Import direto (deve funcionar se estiver no bundle)
+                pdfMakeModule = await import('pdfmake/build/pdfmake');
+                pdfFontsModule = await import('pdfmake/build/vfs_fonts');
+                console.log('✅ Import direto funcionou');
+            } catch (importError) {
+                console.warn('⚠️ Import direto falhou, tentando alternativas...', importError);
+                
+                // Tentativa 2: Com extensão .js
+                try {
+                    pdfMakeModule = await import('pdfmake/build/pdfmake.js');
+                    pdfFontsModule = await import('pdfmake/build/vfs_fonts.js');
+                    console.log('✅ Import com .js funcionou');
+                } catch (jsError) {
+                    console.warn('⚠️ Import com .js falhou, tentando sem build/...', jsError);
+                    
+                    // Tentativa 3: Sem o caminho build/
+                    pdfMakeModule = await import('pdfmake');
+                    pdfFontsModule = await import('pdfmake/build/vfs_fonts');
+                    console.log('✅ Import sem build/ funcionou');
+                }
+            }
             
             console.log('✅ Módulos importados, configurando...');
+            console.log('📦 pdfMakeModule:', pdfMakeModule);
+            console.log('📦 pdfFontsModule:', pdfFontsModule);
             
             // Obter o objeto correto (pode ser default ou o próprio objeto)
-            const pdfMake = pdfMakeModule.default || pdfMakeModule;
+            const pdfMake = pdfMakeModule?.default || pdfMakeModule;
             
             if (!pdfMake) {
-                throw new Error('pdfmake não foi encontrado no módulo');
+                console.error('❌ pdfMake é null ou undefined', { pdfMakeModule });
+                throw new Error('pdfmake não foi encontrado no módulo. Verifique se o módulo está instalado corretamente.');
+            }
+            
+            if (!pdfMake.createPdf) {
+                console.error('❌ pdfMake.createPdf não existe', { pdfMake, keys: Object.keys(pdfMake) });
+                throw new Error('pdfmake.createPdf não está disponível. O módulo pode estar incompleto.');
             }
             
             // Configurar fontes - vfs_fonts pode ter diferentes estruturas
@@ -58,6 +88,12 @@ async function getPdfMake() {
             console.log('✅ pdfmake inicializado com sucesso');
         } catch (error) {
             console.error('❌ Erro ao importar pdfmake:', error);
+            console.error('📋 Detalhes do erro:', {
+                message: error.message,
+                stack: error.stack,
+                name: error.name,
+                cause: error.cause
+            });
             
             // Tentar fallback com require se disponível (em ambiente Node.js)
             if (typeof require !== 'undefined') {
@@ -74,10 +110,24 @@ async function getPdfMake() {
                     console.log('✅ pdfmake carregado via require');
                 } catch (requireError) {
                     console.error('❌ Erro ao usar require como fallback:', requireError);
-                    throw error;
+                    // Criar erro mais descritivo
+                    const detailedError = new Error(
+                        `Falha ao carregar pdfmake: ${error.message}. ` +
+                        `Verifique se o módulo pdfmake está instalado (npm install pdfmake). ` +
+                        `Em produção, verifique se o módulo está incluído no bundle.`
+                    );
+                    detailedError.originalError = error;
+                    throw detailedError;
                 }
             } else {
-                throw error;
+                // Criar erro mais descritivo para ambiente browser
+                const detailedError = new Error(
+                    `Falha ao carregar pdfmake dinamicamente: ${error.message}. ` +
+                    `O módulo pode não estar disponível no bundle. ` +
+                    `Verifique o console do navegador para mais detalhes.`
+                );
+                detailedError.originalError = error;
+                throw detailedError;
             }
         }
     }
