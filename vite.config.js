@@ -22,20 +22,20 @@ export default defineConfig({
         '.js': 'jsx',
       },
     },
-    include: ['react', 'react-dom', 'react-router-dom', 'pdfmake/build/pdfmake', 'pdfmake/build/vfs_fonts']
+    include: [
+      'react', 
+      'react-dom', 
+      'react-router-dom', 
+      'pdfmake/build/pdfmake.js', 
+      'pdfmake/build/vfs_fonts.js'
+    ]
     // Incluir pdfmake para pré-processamento durante o dev e garantir disponibilidade
   },
   build: {
     chunkSizeWarningLimit: 1000, // aumenta o limite para 1000 kB
     rollupOptions: {
-      // Externalizar pdfmake conforme sugerido pela mensagem de erro do Rollup
-      // O módulo será carregado dinamicamente em runtime, não durante o build
-      external: (id) => {
-        if (id.includes('pdfmake/build/pdfmake') || id.includes('pdfmake/build/vfs_fonts')) {
-          return true;
-        }
-        return false;
-      },
+      // NÃO externalizar pdfmake - deixar o Vite/Rollup bundlar corretamente
+      // O external estava causando problemas de resolução em dev mode
       output: {
         manualChunks(id) {
           // Separar node_modules em chunk separado
