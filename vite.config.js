@@ -28,6 +28,15 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 1000, // aumenta o limite para 1000 kB
     rollupOptions: {
+      // Externalizar pdfmake conforme sugerido pela mensagem de erro do Rollup
+      // Isso permite que o módulo seja carregado dinamicamente em runtime
+      external: (id) => {
+        // Externalizar imports do pdfmake para evitar erro durante o build
+        if (id.includes('pdfmake/build/pdfmake') || id.includes('pdfmake/build/vfs_fonts')) {
+          return true;
+        }
+        return false;
+      },
       output: {
         manualChunks(id) {
           // Separar node_modules em chunk separado
