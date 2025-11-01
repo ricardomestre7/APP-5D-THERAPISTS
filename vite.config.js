@@ -22,8 +22,8 @@ export default defineConfig({
         '.js': 'jsx',
       },
     },
-    include: ['react', 'react-dom', 'react-router-dom']
-    // pdfmake não incluído aqui - será carregado dinamicamente em runtime
+    include: ['react', 'react-dom', 'react-router-dom', 'pdfmake/build/pdfmake', 'pdfmake/build/vfs_fonts']
+    // Incluir pdfmake para pré-processamento durante o dev e garantir disponibilidade
   },
   build: {
     chunkSizeWarningLimit: 1000, // aumenta o limite para 1000 kB
