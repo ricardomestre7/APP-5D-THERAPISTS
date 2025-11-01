@@ -729,20 +729,26 @@ export async function gerarPDFRelatorio({
                 // Calcular médias da primeira e última sessão
                 let primeiraMedia = 0, ultimaMedia = 0, count = 0;
                 
-                if (primeiraSessao?.resultados) {
-                    Object.values(primeiraSessao.resultados).forEach(v => {
-                        const num = parseFloat(v);
-                        if (!isNaN(num)) { primeiraMedia += num; count++; }
-                    });
+                if (primeiraSessao?.resultados && typeof primeiraSessao.resultados === 'object') {
+                    const valores = Object.values(primeiraSessao.resultados);
+                    if (Array.isArray(valores)) {
+                        valores.forEach(v => {
+                            const num = parseFloat(v);
+                            if (!isNaN(num)) { primeiraMedia += num; count++; }
+                        });
+                    }
                     primeiraMedia = count > 0 ? primeiraMedia / count : 0;
                 }
                 
-                if (ultimaSessao?.resultados) {
+                if (ultimaSessao?.resultados && typeof ultimaSessao.resultados === 'object') {
                     let countUltima = 0;
-                    Object.values(ultimaSessao.resultados).forEach(v => {
-                        const num = parseFloat(v);
-                        if (!isNaN(num)) { ultimaMedia += num; countUltima++; }
-                    });
+                    const valores = Object.values(ultimaSessao.resultados);
+                    if (Array.isArray(valores)) {
+                        valores.forEach(v => {
+                            const num = parseFloat(v);
+                            if (!isNaN(num)) { ultimaMedia += num; countUltima++; }
+                        });
+                    }
                     ultimaMedia = countUltima > 0 ? ultimaMedia / countUltima : 0;
                 }
                 
@@ -1023,7 +1029,11 @@ export async function gerarPDFRelatorio({
         // Tabela de Análise por Campo - APRIMORADA
         const tabelaCampos = [];
         if (analise?.indicesPorCampo && typeof analise.indicesPorCampo === 'object') {
-            const indicesEntries = Object.entries(analise.indicesPorCampo);
+            // Garantir que indicesPorCampo seja um objeto válido
+            const indicesPorCampo = analise?.indicesPorCampo && typeof analise.indicesPorCampo === 'object' 
+                ? analise.indicesPorCampo 
+                : {};
+            const indicesEntries = Object.entries(indicesPorCampo);
             
             if (indicesEntries.length > 0) {
                 // Adicionar quebra de página
@@ -1088,76 +1098,88 @@ export async function gerarPDFRelatorio({
                 ];
 
                 // Ordenar por valor (menor primeiro = mais crítico)
-                const sortedEntries = indicesEntries.sort((a, b) => {
-                    const valorA = parseFloat(a[1]?.atual || 0);
-                    const valorB = parseFloat(b[1]?.atual || 0);
-                    return valorA - valorB;
-                });
+                // Garantir que indicesEntries seja um array válido
+                const sortedEntries = Array.isArray(indicesEntries) 
+                    ? [...indicesEntries].sort((a, b) => {
+                        const valorA = parseFloat(a[1]?.atual || 0);
+                        const valorB = parseFloat(b[1]?.atual || 0);
+                        return valorA - valorB;
+                    })
+                    : [];
 
                 // Linhas da tabela com mais informações
-                sortedEntries.forEach(([campo, dados], index) => {
-                    const valor = parseFloat(dados?.atual || 0);
-                    const anterior = parseFloat(dados?.anterior || valor);
-                    const statusColor = getStatusColor(valor);
-                    const statusTexto = getStatusTexto(valor);
-                    
-                    // Calcular evolução
-                    const evolucao = valor - anterior;
-                    const evolucaoTexto = evolucao > 0 ? `+${evolucao.toFixed(1)}` : evolucao.toFixed(1);
-                    const evolucaoColor = evolucao > 0 ? cores.sucesso : evolucao < 0 ? cores.critico : cores.cinza;
-                    
-                    // Determinar prioridade
-                    let prioridade = '';
-                    let prioridadeColor = cores.cinza;
-                    if (valor < 3) {
-                        prioridade = 'URGENTE';
-                        prioridadeColor = cores.critico;
-                    } else if (valor < 5) {
-                        prioridade = 'ALTA';
-                        prioridadeColor = cores.atencao;
-                    } else if (valor < 7) {
-                        prioridade = 'MÉDIA';
-                        prioridadeColor = cores.atencao;
-                    } else {
-                        prioridade = 'BAIXA';
-                        prioridadeColor = cores.sucesso;
-                    }
-
-                    tableBody.push([
-                        { 
-                            text: campo, 
-                            style: 'tableCell', 
-                            bold: true,
-                            fillColor: null // Sempre transparente, zebrado é aplicado no layout
-                        },
-                        { 
-                            text: `${valor.toFixed(1)}/10`, 
-                            style: 'tableCell', 
-                            bold: true, 
-                            color: statusColor,
-                            alignment: 'center'
-                        },
-                        { 
-                            text: evolucaoTexto, 
-                            style: 'tableCell', 
-                            color: evolucaoColor,
-                            alignment: 'center'
-                        },
-                        { 
-                            text: statusTexto, 
-                            style: 'tableCell', 
-                            color: statusColor,
-                            alignment: 'center'
-                        },
-                        { 
-                            text: prioridade, 
-                            style: 'tableCell', 
-                            fontSize: 8, 
-                            color: prioridadeColor,
-                            alignment: 'center'
+                if (Array.isArray(sortedEntries) && sortedEntries.length > 0) {
+                    sortedEntries.forEach((entry) => {
+                        // Garantir que entry seja um array válido [campo, dados]
+                        if (!Array.isArray(entry) || entry.length < 2) {
+                            console.warn('⚠️ Entrada inválida na tabela de campos:', entry);
+                            return;
                         }
-                    ]);
-                });
+                        
+                        const [campo, dados] = entry;
+                        const valor = parseFloat(dados?.atual || 0);
+                        const anterior = parseFloat(dados?.anterior || valor);
+                        const statusColor = getStatusColor(valor);
+                        const statusTexto = getStatusTexto(valor);
+                        
+                        // Calcular evolução
+                        const evolucao = valor - anterior;
+                        const evolucaoTexto = evolucao > 0 ? `+${evolucao.toFixed(1)}` : evolucao.toFixed(1);
+                        const evolucaoColor = evolucao > 0 ? cores.sucesso : evolucao < 0 ? cores.critico : cores.cinza;
+                        
+                        // Determinar prioridade
+                        let prioridade = '';
+                        let prioridadeColor = cores.cinza;
+                        if (valor < 3) {
+                            prioridade = 'URGENTE';
+                            prioridadeColor = cores.critico;
+                        } else if (valor < 5) {
+                            prioridade = 'ALTA';
+                            prioridadeColor = cores.atencao;
+                        } else if (valor < 7) {
+                            prioridade = 'MÉDIA';
+                            prioridadeColor = cores.atencao;
+                        } else {
+                            prioridade = 'BAIXA';
+                            prioridadeColor = cores.sucesso;
+                        }
+
+                        tableBody.push([
+                            { 
+                                text: campo || '-', 
+                                style: 'tableCell', 
+                                bold: true,
+                                fillColor: null // Sempre transparente, zebrado é aplicado no layout
+                            },
+                            { 
+                                text: `${valor.toFixed(1)}/10`, 
+                                style: 'tableCell', 
+                                bold: true, 
+                                color: statusColor,
+                                alignment: 'center'
+                            },
+                            { 
+                                text: evolucaoTexto, 
+                                style: 'tableCell', 
+                                color: evolucaoColor,
+                                alignment: 'center'
+                            },
+                            { 
+                                text: statusTexto, 
+                                style: 'tableCell', 
+                                color: statusColor,
+                                alignment: 'center'
+                            },
+                            { 
+                                text: prioridade, 
+                                style: 'tableCell', 
+                                fontSize: 8, 
+                                color: prioridadeColor,
+                                alignment: 'center'
+                            }
+                        ]);
+                    });
+                }
 
                 // Layout customizado otimizado para tabela de campos (reutilizando função helper)
                 const tableLayoutCampos = criarLayoutTabela(cores.principal);
@@ -1238,21 +1260,26 @@ export async function gerarPDFRelatorio({
                 ]
             ];
 
-            ultimasSessoes.forEach((sessao) => {
-                // Calcular média e quantidade de campos avaliados
-                let soma = 0, count = 0;
-                const camposAvaliados = [];
-                
-                if (sessao?.resultados && typeof sessao.resultados === 'object') {
-                    Object.entries(sessao.resultados).forEach(([campo, valor]) => {
-                        const num = parseFloat(valor);
-                        if (!isNaN(num) && num > 0) { 
-                            soma += num; 
-                            count++;
-                            camposAvaliados.push(campo);
+            // Garantir que ultimasSessoes é um array válido
+            if (Array.isArray(ultimasSessoes)) {
+                ultimasSessoes.forEach((sessao) => {
+                    // Calcular média e quantidade de campos avaliados
+                    let soma = 0, count = 0;
+                    const camposAvaliados = [];
+                    
+                    if (sessao?.resultados && typeof sessao.resultados === 'object') {
+                        const resultadosEntries = Object.entries(sessao.resultados);
+                        if (Array.isArray(resultadosEntries)) {
+                            resultadosEntries.forEach(([campo, valor]) => {
+                                const num = parseFloat(valor);
+                                if (!isNaN(num) && num > 0) { 
+                                    soma += num; 
+                                    count++;
+                                    camposAvaliados.push(campo);
+                                }
+                            });
                         }
-                    });
-                }
+                    }
                 
                 const media = count > 0 ? (soma / count).toFixed(1) : '0';
                 const numMedia = parseFloat(media);
@@ -1299,7 +1326,8 @@ export async function gerarPDFRelatorio({
                         alignment: 'center'
                     }
                 ]);
-            });
+                });
+            }
 
             // Layout customizado otimizado para histórico de sessões (reutilizando função helper)
             const tableLayoutSessoes = criarLayoutTabela(cores.azul);
@@ -1348,7 +1376,9 @@ export async function gerarPDFRelatorio({
             });
 
             // Organizar campos críticos em colunas para melhor aproveitamento do espaço
-            const camposCriticosItems = camposCriticos.map((critico) => {
+            // Garantir que camposCriticos seja um array válido
+            const camposCriticosValidados = Array.isArray(camposCriticos) ? camposCriticos : [];
+            const camposCriticosItems = camposCriticosValidados.map((critico) => {
                 // Calcular quanto falta para meta (considerando 7 como meta)
                 const meta = 7;
                 const faltante = Math.max(0, meta - critico.valor);
@@ -1402,7 +1432,7 @@ export async function gerarPDFRelatorio({
             });
 
             // Dividir em 2 colunas se houver mais de 2 campos críticos
-            if (camposCriticos.length > 2) {
+            if (camposCriticosValidados.length > 2) {
                 const metade = Math.ceil(camposCriticosItems.length / 2);
                 const coluna1 = camposCriticosItems.slice(0, metade);
                 const coluna2 = camposCriticosItems.slice(metade);
@@ -1427,14 +1457,16 @@ export async function gerarPDFRelatorio({
                 });
             } else {
                 // Se 2 ou menos, manter em uma coluna
-                camposCriticosItems.forEach(item => {
-                    camposCriticosSecao.push(item);
-                });
+                if (Array.isArray(camposCriticosItems)) {
+                    camposCriticosItems.forEach(item => {
+                        camposCriticosSecao.push(item);
+                    });
+                }
             }
             
             // Com o layout de 2 colunas, normalmente todos os campos cabem na mesma página
             // A continuação só é necessária se houver mais de 8 campos críticos
-            if (camposCriticos.length > 8) {
+            if (camposCriticosValidados.length > 8) {
                 camposCriticosSecao.push({
                     text: '',
                     pageBreak: 'before'
