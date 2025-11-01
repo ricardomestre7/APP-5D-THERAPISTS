@@ -1793,22 +1793,69 @@ export async function gerarPDFRelatorio({
                     margin: [40, 15, 40, 0]
                 };
             },
-            content: [
-                // CAPA (página 1)
-                ...garantirArray(capa, []),
-                // RESUMO EXECUTIVO (página 2) - COM FUNDO
-                ...garantirArray(resumoExecutivo, []),
-                // INSIGHTS E OBSERVAÇÕES (página 3)
-                ...garantirArray(insightsSecao, []),
-                // TABELA DE CAMPOS (página 4)
-                ...garantirArray(tabelaCampos, []),
-                // HISTÓRICO DE SESSÕES (página 5)
-                ...garantirArray(historicoSessoes, []),
-                // CAMPOS CRÍTICOS (página 6+)
-                ...garantirArray(camposCriticosSecao, []),
-                // RECOMENDAÇÕES (página final)
-                ...garantirArray(recomendacoes, [])
-            ].filter(item => item !== null && item !== undefined), // Remover valores null/undefined
+            content: (() => {
+                // Construir content de forma segura com try-catch individual para cada seção
+                const contentItems = [];
+                
+                try {
+                    contentItems.push(...garantirArray(capa, []));
+                } catch (e) {
+                    console.warn('⚠️ Erro ao adicionar capa:', e);
+                }
+                
+                try {
+                    contentItems.push(...garantirArray(resumoExecutivo, []));
+                } catch (e) {
+                    console.warn('⚠️ Erro ao adicionar resumo executivo:', e);
+                }
+                
+                try {
+                    contentItems.push(...garantirArray(insightsSecao, []));
+                } catch (e) {
+                    console.warn('⚠️ Erro ao adicionar insights:', e);
+                }
+                
+                try {
+                    contentItems.push(...garantirArray(tabelaCampos, []));
+                } catch (e) {
+                    console.warn('⚠️ Erro ao adicionar tabela de campos:', e);
+                }
+                
+                try {
+                    contentItems.push(...garantirArray(historicoSessoes, []));
+                } catch (e) {
+                    console.warn('⚠️ Erro ao adicionar histórico de sessões:', e);
+                }
+                
+                try {
+                    contentItems.push(...garantirArray(camposCriticosSecao, []));
+                } catch (e) {
+                    console.warn('⚠️ Erro ao adicionar campos críticos:', e);
+                }
+                
+                try {
+                    contentItems.push(...garantirArray(recomendacoes, []));
+                } catch (e) {
+                    console.warn('⚠️ Erro ao adicionar recomendações:', e);
+                }
+                
+                // Filtrar e validar itens
+                return contentItems
+                    .filter(item => item !== null && item !== undefined)
+                    .filter(item => {
+                        // Garantir que cada item seja um objeto válido
+                        if (typeof item === 'object' && !Array.isArray(item)) {
+                            return true;
+                        }
+                        if (Array.isArray(item)) {
+                            // Se for array, manter mas logar
+                            console.warn('⚠️ Item do content é array (pode causar problema)');
+                            return true;
+                        }
+                        console.warn('⚠️ Item inválido removido do content:', typeof item);
+                        return false;
+                    });
+            })()
             styles: {
                 // Estilos da Capa (cores holísticas azul/verde)
                 tituloCapa: {
@@ -1984,15 +2031,58 @@ export async function gerarPDFRelatorio({
         const dataArquivo = new Date().toISOString().split('T')[0]; // Data para nome do arquivo (formato ISO)
         const fileName = `Relatorio_Quantico_${sanitizedNome}_${dataArquivo}.pdf`;
         
+        // Validar estrutura do docDefinition antes de passar para pdfmake
+        console.log('🔍 Validando estrutura do documento...');
+        if (!docDefinition || typeof docDefinition !== 'object') {
+            throw new Error('Estrutura do documento inválida');
+        }
+        
+        // Garantir que content seja um array válido
+        if (!Array.isArray(docDefinition.content)) {
+            console.warn('⚠️ Content não é array, convertendo...');
+            docDefinition.content = garantirArray(docDefinition.content, []);
+        }
+        
+        // Validar que cada item do content seja válido
+        docDefinition.content = docDefinition.content
+            .map((item, index) => {
+                if (item === null || item === undefined) {
+                    console.warn(`⚠️ Item ${index} do content é null/undefined, removendo...`);
+                    return null;
+                }
+                return item;
+            })
+            .filter(item => item !== null);
+        
+        console.log(`📊 Content validado: ${docDefinition.content.length} itens`);
+        
         console.log('📄 Criando documento PDF...');
-        const pdfDocGenerator = pdfMake.createPdf(docDefinition);
+        let pdfDocGenerator;
+        try {
+            pdfDocGenerator = pdfMake.createPdf(docDefinition);
+        } catch (createError) {
+            console.error('❌ Erro ao criar PDF com createPdf:', createError);
+            console.error('📋 Estrutura do docDefinition:', {
+                hasContent: !!docDefinition.content,
+                contentLength: docDefinition.content?.length,
+                hasStyles: !!docDefinition.styles,
+                hasPageSize: !!docDefinition.pageSize,
+                hasMargins: !!docDefinition.pageMargins
+            });
+            throw new Error(`Erro ao criar PDF: ${createError.message || 'Erro desconhecido ao processar documento'}`);
+        }
         
         if (!pdfDocGenerator || typeof pdfDocGenerator.download !== 'function') {
-            throw new Error('Erro ao criar gerador de PDF');
+            throw new Error('Gerador de PDF criado mas método download não está disponível');
         }
         
         console.log('💾 Fazendo download do PDF...');
-        pdfDocGenerator.download(fileName);
+        try {
+            pdfDocGenerator.download(fileName);
+        } catch (downloadError) {
+            console.error('❌ Erro ao fazer download do PDF:', downloadError);
+            throw new Error(`Erro ao baixar PDF: ${downloadError.message || 'Erro desconhecido no download'}`);
+        }
 
         console.log('✅ PDF gerado e baixado com sucesso usando pdfmake!');
         return { success: true, fileName };
@@ -2002,9 +2092,27 @@ export async function gerarPDFRelatorio({
         console.error('📋 Detalhes do erro:', {
             message: error.message,
             stack: error.stack,
-            name: error.name
+            name: error.name,
+            // Informações adicionais para debug
+            errorType: error.constructor?.name,
+            isForEachError: error.message?.includes('forEach') || error.stack?.includes('forEach'),
+            isPdfMakeError: error.message?.includes('pdfmake') || error.stack?.includes('pdfmake')
         });
-        throw new Error(`Erro ao gerar PDF: ${error.message}`);
+        
+        // Mensagem de erro mais amigável para o usuário
+        let mensagemErro = 'Erro ao gerar PDF';
+        
+        if (error.message?.includes('forEach') || error.message?.includes('is not a function')) {
+            mensagemErro = 'Erro interno ao processar dados do PDF. Por favor, verifique se todas as sessões têm dados válidos.';
+        } else if (error.message?.includes('pdfmake') || error.message?.includes('import')) {
+            mensagemErro = 'Erro ao carregar biblioteca de PDF. Por favor, recarregue a página e tente novamente.';
+        } else if (error.message?.includes('Content') || error.message?.includes('documento')) {
+            mensagemErro = 'Erro ao estruturar o documento. Verifique se há dados suficientes para gerar o relatório.';
+        } else {
+            mensagemErro = `Erro ao gerar PDF: ${error.message || 'Erro desconhecido'}`;
+        }
+        
+        throw new Error(mensagemErro);
     }
 }
 
