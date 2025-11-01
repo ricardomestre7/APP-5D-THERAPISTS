@@ -67,6 +67,57 @@ async function getPdfMake() {
 }
 
 /**
+ * Helper para garantir que uma variável seja um array válido
+ */
+function garantirArray(valor, valorPadrao = []) {
+    if (Array.isArray(valor)) {
+        return valor;
+    }
+    if (valor == null) {
+        return valorPadrao;
+    }
+    // Se for um objeto iterável, tentar converter
+    if (typeof valor === 'object' && valor !== null) {
+        try {
+            return Array.from(valor);
+        } catch (e) {
+            return valorPadrao;
+        }
+    }
+    return valorPadrao;
+}
+
+/**
+ * Helper para garantir que Object.values retorne array
+ */
+function valoresSeguros(obj) {
+    if (!obj || typeof obj !== 'object') {
+        return [];
+    }
+    try {
+        const valores = Object.values(obj);
+        return Array.isArray(valores) ? valores : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+/**
+ * Helper para garantir que Object.entries retorne array
+ */
+function entradasSeguras(obj) {
+    if (!obj || typeof obj !== 'object') {
+        return [];
+    }
+    try {
+        const entradas = Object.entries(obj);
+        return Array.isArray(entradas) ? entradas : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+/**
  * Gera relatório PDF profissional usando pdfmake
  * @param {Object} params - Dados para o relatório
  */
@@ -87,7 +138,7 @@ export async function gerarPDFRelatorio({
         // ============================================================================
         // PADRÃO DE MARGENS (pdfmake)
         // ============================================================================
-        // Sintaxe disponível para margins:
+        // Sintaxe disponível para margins: 
         // 
         // 1. Array completo: [left, top, right, bottom]
         //    margin: [5, 2, 10, 20]
@@ -104,11 +155,12 @@ export async function gerarPDFRelatorio({
         // Neste documento, usamos principalmente [left, top, right, bottom] para precisão
         // ============================================================================
 
-        // Preparar dados
+        // Preparar dados - garantir que sejam arrays válidos
         const dataAtual = new Date().toLocaleDateString('pt-BR');
         const scoreGeral = analise?.scoreGeral || 0;
-        const totalSessoes = Array.isArray(sessoes) ? sessoes.length : 0;
-        const camposCriticos = Array.isArray(analise?.camposCriticos) ? analise.camposCriticos : [];
+        const sessoesArray = garantirArray(sessoes, []);
+        const totalSessoes = sessoesArray.length;
+        const camposCriticos = garantirArray(analise?.camposCriticos, []);
 
         // Definir cores - Paleta holística azul/verde (evitando vermelho)
         const cores = {
@@ -722,33 +774,29 @@ export async function gerarPDFRelatorio({
                 color: cores.azulEscuro
             },
             // Período de acompanhamento e comparação
-            ...(sessoes.length > 0 ? (() => {
-                const primeiraSessao = sessoes[sessoes.length - 1];
-                const ultimaSessao = sessoes[0];
+            ...(sessoesArray.length > 0 ? (() => {
+                const primeiraSessao = sessoesArray[sessoesArray.length - 1];
+                const ultimaSessao = sessoesArray[0];
                 
                 // Calcular médias da primeira e última sessão
                 let primeiraMedia = 0, ultimaMedia = 0, count = 0;
                 
                 if (primeiraSessao?.resultados && typeof primeiraSessao.resultados === 'object') {
-                    const valores = Object.values(primeiraSessao.resultados);
-                    if (Array.isArray(valores)) {
-                        valores.forEach(v => {
-                            const num = parseFloat(v);
-                            if (!isNaN(num)) { primeiraMedia += num; count++; }
-                        });
-                    }
+                    const valores = valoresSeguros(primeiraSessao.resultados);
+                    valores.forEach(v => {
+                        const num = parseFloat(v);
+                        if (!isNaN(num)) { primeiraMedia += num; count++; }
+                    });
                     primeiraMedia = count > 0 ? primeiraMedia / count : 0;
                 }
                 
                 if (ultimaSessao?.resultados && typeof ultimaSessao.resultados === 'object') {
                     let countUltima = 0;
-                    const valores = Object.values(ultimaSessao.resultados);
-                    if (Array.isArray(valores)) {
-                        valores.forEach(v => {
-                            const num = parseFloat(v);
-                            if (!isNaN(num)) { ultimaMedia += num; countUltima++; }
-                        });
-                    }
+                    const valores = valoresSeguros(ultimaSessao.resultados);
+                    valores.forEach(v => {
+                        const num = parseFloat(v);
+                        if (!isNaN(num)) { ultimaMedia += num; countUltima++; }
+                    });
                     ultimaMedia = countUltima > 0 ? ultimaMedia / countUltima : 0;
                 }
                 
@@ -1033,7 +1081,7 @@ export async function gerarPDFRelatorio({
             const indicesPorCampo = analise?.indicesPorCampo && typeof analise.indicesPorCampo === 'object' 
                 ? analise.indicesPorCampo 
                 : {};
-            const indicesEntries = Object.entries(indicesPorCampo);
+            const indicesEntries = entradasSeguras(indicesPorCampo);
             
             if (indicesEntries.length > 0) {
                 // Adicionar quebra de página
@@ -1200,7 +1248,7 @@ export async function gerarPDFRelatorio({
 
         // Histórico de Sessões
         const historicoSessoes = [];
-        const ultimasSessoes = Array.isArray(sessoes) ? sessoes.slice(0, 10) : [];
+        const ultimasSessoes = garantirArray(sessoesArray.slice(0, 10), []);
         
         if (ultimasSessoes.length > 0) {
             historicoSessoes.push({ text: '', pageBreak: 'before' });
@@ -1261,26 +1309,24 @@ export async function gerarPDFRelatorio({
             ];
 
             // Garantir que ultimasSessoes é um array válido
-            if (Array.isArray(ultimasSessoes)) {
-                ultimasSessoes.forEach((sessao) => {
-                    // Calcular média e quantidade de campos avaliados
-                    let soma = 0, count = 0;
-                    const camposAvaliados = [];
-                    
-                    if (sessao?.resultados && typeof sessao.resultados === 'object') {
-                        const resultadosEntries = Object.entries(sessao.resultados);
-                        if (Array.isArray(resultadosEntries)) {
-                            resultadosEntries.forEach(([campo, valor]) => {
-                                const num = parseFloat(valor);
-                                if (!isNaN(num) && num > 0) { 
-                                    soma += num; 
-                                    count++;
-                                    camposAvaliados.push(campo);
-                                }
-                            });
-                        }
-                    }
+            const ultimasSessoesValidado = garantirArray(ultimasSessoes, []);
+            ultimasSessoesValidado.forEach((sessao) => {
+                // Calcular média e quantidade de campos avaliados
+                let soma = 0, count = 0;
+                const camposAvaliados = [];
                 
+                if (sessao?.resultados && typeof sessao.resultados === 'object') {
+                    const resultadosEntries = entradasSeguras(sessao.resultados);
+                    resultadosEntries.forEach(([campo, valor]) => {
+                        const num = parseFloat(valor);
+                        if (!isNaN(num) && num > 0) { 
+                            soma += num; 
+                            count++;
+                            camposAvaliados.push(campo);
+                        }
+                    });
+                }
+            
                 const media = count > 0 ? (soma / count).toFixed(1) : '0';
                 const numMedia = parseFloat(media);
                 const statusColor = getStatusColor(numMedia);
@@ -1326,8 +1372,7 @@ export async function gerarPDFRelatorio({
                         alignment: 'center'
                     }
                 ]);
-                });
-            }
+            });
 
             // Layout customizado otimizado para histórico de sessões (reutilizando função helper)
             const tableLayoutSessoes = criarLayoutTabela(cores.azul);
