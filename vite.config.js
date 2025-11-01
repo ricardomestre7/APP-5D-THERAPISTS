@@ -34,26 +34,33 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           // Separar node_modules em chunk separado
+          // Usar verificações mais precisas para evitar falsos positivos
           if (id.includes('node_modules')) {
+            // Verificar caminhos completos para melhor precisão
+            const normalizedId = id.replace(/\\/g, '/');
+            
             // Separar bibliotecas grandes em chunks específicos
-            if (id.includes('jspdf')) {
+            if (normalizedId.includes('/jspdf/') || normalizedId.endsWith('/jspdf')) {
               return 'vendor-pdf';
             }
-            if (id.includes('pdfmake')) {
+            if (normalizedId.includes('/pdfmake/') || normalizedId.endsWith('/pdfmake')) {
               return 'vendor-pdfmake';
             }
-            if (id.includes('firebase')) {
+            if (normalizedId.includes('/firebase/') || normalizedId.includes('/@firebase/')) {
               return 'vendor-firebase';
             }
-            if (id.includes('chart') || id.includes('recharts')) {
+            if (normalizedId.includes('/chart') || normalizedId.includes('/recharts')) {
               return 'vendor-charts';
             }
+            // Pacote padrão para outros node_modules
             return 'vendor';
           }
           // Separar utilitários grandes em chunks próprios
-          if (id.includes('utils/gerarPDF')) {
+          if (id.includes('/utils/gerarPDF') || id.includes('\\utils\\gerarPDF')) {
             return 'pdf-generator';
           }
+          // Retornar undefined para manter chunk padrão
+          return undefined;
         }
       }
     },

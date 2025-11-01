@@ -95,8 +95,8 @@ export async function gerarPDFRelatorio({
     terapias = {},
 }) {
     try {
+        // Log sem informações pessoais (PII) para segurança
         console.log('🔄 Iniciando geração de PDF com pdfmake...', {
-            pacienteNome,
             totalSessoes: sessoes?.length || 0,
             hasAnalise: !!analise
         });
@@ -278,6 +278,36 @@ export async function gerarPDFRelatorio({
                     absolutePosition: { x: 0, y: 0 }
                 }
             ];
+        };
+
+        // Função helper para criar layout de tabela padronizado (reutilizável)
+        const criarLayoutTabela = (corPrincipal = cores.principal) => {
+            return {
+                hLineWidth: (i, node) => {
+                    // i = 0: linha acima da primeira linha (topo da tabela) - SEM linha
+                    // i = 1 até node.table.body.length - 1: linhas entre as linhas de dados
+                    // i = node.table.body.length: linha abaixo da última linha (final da tabela) - COM linha
+                    if (i === 0) return 0; // Sem linha no topo
+                    // Garantir que a linha final SEMPRE apareça (espessura maior para garantir visibilidade)
+                    if (i === node.table.body.length) return 1; // Linha delimitadora no final da tabela - mais espessa
+                    return i === 1 ? 1 : 0.5; // Linha grossa após cabeçalho (i=1), fina entre linhas (i>1)
+                },
+                vLineWidth: () => 0.5, // Linhas verticais finas
+                hLineColor: (i, node) => {
+                    // Linha mais escura após cabeçalho e no final
+                    if (i === node.table.body.length) return cores.cinza; // Linha final - garantir cor visível
+                    return i === 1 ? corPrincipal : cores.cinza;
+                },
+                vLineColor: () => cores.cinza,
+                fillColor: (rowIndex) => {
+                    // Zebrado: linhas pares com fundo claro (exceto cabeçalho)
+                    return rowIndex === 0 ? null : (rowIndex % 2 === 0 ? '#FAFAFA' : null);
+                },
+                paddingLeft: () => 8,
+                paddingRight: () => 8,
+                paddingTop: (i) => i === 0 ? 6 : 4,
+                paddingBottom: (i, node) => i === node.table.body.length - 1 ? 6 : 4
+            };
         };
 
         // Função helper para criar cabeçalhos de seção (compacto)
@@ -1146,33 +1176,8 @@ export async function gerarPDFRelatorio({
                     ]);
                 });
 
-                // Layout customizado otimizado para tabela de campos
-                const tableLayoutCampos = {
-                    hLineWidth: (i, node) => {
-                        // i = 0: linha acima da primeira linha (topo da tabela) - SEM linha
-                        // i = 1 até node.table.body.length - 1: linhas entre as linhas de dados
-                        // i = node.table.body.length: linha abaixo da última linha (final da tabela) - COM linha
-                        if (i === 0) return 0; // Sem linha no topo
-                        // Garantir que a linha final SEMPRE apareça (espessura maior para garantir visibilidade)
-                        if (i === node.table.body.length) return 1; // Linha delimitadora no final da tabela - mais espessa
-                        return i === 1 ? 1 : 0.5; // Linha grossa após cabeçalho (i=1), fina entre linhas (i>1)
-                    },
-                    vLineWidth: () => 0.5, // Linhas verticais finas
-                    hLineColor: (i, node) => {
-                        // Linha mais escura após cabeçalho e no final
-                        if (i === node.table.body.length) return cores.cinza; // Linha final - garantir cor visível
-                        return i === 1 ? cores.principal : cores.cinza;
-                    },
-                    vLineColor: () => cores.cinza,
-                    fillColor: (rowIndex) => {
-                        // Zebrado: linhas pares com fundo claro (exceto cabeçalho)
-                        return rowIndex === 0 ? null : (rowIndex % 2 === 0 ? '#FAFAFA' : null);
-                    },
-                    paddingLeft: () => 8,
-                    paddingRight: () => 8,
-                    paddingTop: (i) => i === 0 ? 6 : 4,
-                    paddingBottom: (i, node) => i === node.table.body.length - 1 ? 6 : 4
-                };
+                // Layout customizado otimizado para tabela de campos (reutilizando função helper)
+                const tableLayoutCampos = criarLayoutTabela(cores.principal);
 
                 tabelaCampos.push({
                     table: {
@@ -1313,33 +1318,8 @@ export async function gerarPDFRelatorio({
                 ]);
             });
 
-            // Layout customizado otimizado para histórico de sessões
-            const tableLayoutSessoes = {
-                hLineWidth: (i, node) => {
-                    // i = 0: linha acima da primeira linha (topo da tabela) - SEM linha
-                    // i = 1 até node.table.body.length - 1: linhas entre as linhas de dados
-                    // i = node.table.body.length: linha abaixo da última linha (final da tabela) - COM linha
-                    if (i === 0) return 0; // Sem linha no topo
-                    // Garantir que a linha final SEMPRE apareça (espessura maior para garantir visibilidade)
-                    if (i === node.table.body.length) return 1; // Linha delimitadora no final da tabela - mais espessa
-                    return i === 1 ? 1 : 0.5; // Linha grossa após cabeçalho (i=1), fina entre linhas (i>1)
-                },
-                vLineWidth: () => 0.5, // Linhas verticais finas
-                hLineColor: (i, node) => {
-                    // Linha mais escura após cabeçalho e no final
-                    if (i === node.table.body.length) return cores.cinza; // Linha final - garantir cor visível
-                    return i === 1 ? cores.azul : cores.cinza;
-                },
-                vLineColor: () => cores.cinza,
-                fillColor: (rowIndex) => {
-                    // Zebrado: linhas pares com fundo claro (exceto cabeçalho)
-                    return rowIndex === 0 ? null : (rowIndex % 2 === 0 ? '#FAFAFA' : null);
-                },
-                paddingLeft: () => 8,
-                paddingRight: () => 8,
-                paddingTop: (i) => i === 0 ? 6 : 4,
-                paddingBottom: (i, node) => i === node.table.body.length - 1 ? 6 : 4
-            };
+            // Layout customizado otimizado para histórico de sessões (reutilizando função helper)
+            const tableLayoutSessoes = criarLayoutTabela(cores.azul);
 
             historicoSessoes.push({
                 table: {
@@ -1935,8 +1915,14 @@ export async function gerarPDFRelatorio({
         
         console.log('✅ pdfmake carregado, gerando PDF...');
         
-        // Gerar e baixar PDF
-        const fileName = `Relatorio_Quantico_${pacienteNome.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+        // Gerar e baixar PDF - sanitizar nome do arquivo para segurança
+        // Remove caracteres especiais e limita tamanho para evitar problemas de sistema de arquivos
+        const sanitizedNome = pacienteNome
+            .replace(/[^a-zA-Z0-9\s]/g, '') // Remove caracteres especiais
+            .replace(/\s+/g, '_') // Substitui espaços por underscore
+            .substring(0, 50); // Limita a 50 caracteres
+        const dataArquivo = new Date().toISOString().split('T')[0]; // Data para nome do arquivo (formato ISO)
+        const fileName = `Relatorio_Quantico_${sanitizedNome}_${dataArquivo}.pdf`;
         
         console.log('📄 Criando documento PDF...');
         const pdfDocGenerator = pdfMake.createPdf(docDefinition);
