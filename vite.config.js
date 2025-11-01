@@ -11,13 +11,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      // Alias para pdfmake - ajudar o Rollup a encontrar os arquivos corretos
-      'pdfmake/build/pdfmake': path.resolve(__dirname, 'node_modules/pdfmake/build/pdfmake.js'),
-      'pdfmake/build/vfs_fonts': path.resolve(__dirname, 'node_modules/pdfmake/build/vfs_fonts.js'),
     },
     extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx', '.json'],
     dedupe: ['react', 'react-dom'],
-    // Garantir que pdfmake seja resolvido corretamente
     preserveSymlinks: false
   },
   optimizeDeps: {
@@ -26,7 +22,8 @@ export default defineConfig({
         '.js': 'jsx',
       },
     },
-    include: ['react', 'react-dom', 'react-router-dom', 'pdfmake/build/pdfmake']
+    include: ['react', 'react-dom', 'react-router-dom']
+    // pdfmake não incluído aqui - será carregado dinamicamente em runtime
   },
   build: {
     chunkSizeWarningLimit: 1000, // aumenta o limite para 1000 kB
@@ -66,8 +63,10 @@ export default defineConfig({
     },
     // Configurações adicionais para lidar com importações dinâmicas
     commonjsOptions: {
-      include: [/pdfmake/, /node_modules/],
-      transformMixedEsModules: true
+      include: [/node_modules/],
+      transformMixedEsModules: true,
+      // Excluir pdfmake do processamento CommonJS durante o build
+      exclude: [/pdfmake/]
     }
   },
 }) 

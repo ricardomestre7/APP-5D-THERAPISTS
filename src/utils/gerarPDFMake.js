@@ -12,9 +12,16 @@ async function getPdfMake() {
     if (!pdfMakeInstance) {
         try {
             console.log('📦 Importando pdfmake...');
-            // Importação dinâmica - o Vite agora consegue resolver através do alias configurado
-            const pdfMakeModule = await import('pdfmake/build/pdfmake');
-            const pdfFontsModule = await import('pdfmake/build/vfs_fonts');
+            // Importação dinâmica - usar caminhos que o Vite pode resolver em runtime
+            // Não usar aliases que apontam para arquivos físicos durante o build
+            const pdfMakeModule = await import(
+                /* @vite-ignore */
+                'pdfmake/build/pdfmake.js'
+            );
+            const pdfFontsModule = await import(
+                /* @vite-ignore */
+                'pdfmake/build/vfs_fonts.js'
+            );
             
             console.log('✅ Módulos importados, configurando...');
             
