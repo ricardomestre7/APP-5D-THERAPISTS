@@ -11,9 +11,14 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Alias para pdfmake - ajudar o Rollup a encontrar os arquivos corretos
+      'pdfmake/build/pdfmake': path.resolve(__dirname, 'node_modules/pdfmake/build/pdfmake.js'),
+      'pdfmake/build/vfs_fonts': path.resolve(__dirname, 'node_modules/pdfmake/build/vfs_fonts.js'),
     },
     extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx', '.json'],
-    dedupe: ['react', 'react-dom']
+    dedupe: ['react', 'react-dom'],
+    // Garantir que pdfmake seja resolvido corretamente
+    preserveSymlinks: false
   },
   optimizeDeps: {
     esbuildOptions: {
@@ -34,6 +39,9 @@ export default defineConfig({
             if (id.includes('jspdf')) {
               return 'vendor-pdf';
             }
+            if (id.includes('pdfmake')) {
+              return 'vendor-pdfmake';
+            }
             if (id.includes('firebase')) {
               return 'vendor-firebase';
             }
@@ -48,6 +56,11 @@ export default defineConfig({
           }
         }
       }
+    },
+    // Configurações adicionais para lidar com importações dinâmicas
+    commonjsOptions: {
+      include: [/pdfmake/, /node_modules/],
+      transformMixedEsModules: true
     }
   },
 }) 
