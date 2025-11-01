@@ -40,9 +40,7 @@ export default defineConfig({
             if (normalizedId.includes('/jspdf/') || normalizedId.endsWith('/jspdf')) {
               return 'vendor-pdf';
             }
-            if (normalizedId.includes('/pdfmake/') || normalizedId.endsWith('/pdfmake')) {
-              return 'vendor-pdfmake';
-            }
+            // pdfmake não precisa estar aqui pois será externalizado
             if (normalizedId.includes('/firebase/') || normalizedId.includes('/@firebase/')) {
               return 'vendor-firebase';
             }
@@ -58,7 +56,9 @@ export default defineConfig({
           }
           // Retornar undefined para manter chunk padrão
           return undefined;
-        }
+        },
+        // Configurar globals para módulos externalizados (não necessário para imports dinâmicos)
+        globals: {}
       }
     },
     // Configurações adicionais para lidar com importações dinâmicas
