@@ -246,6 +246,20 @@ export default function Layout({ children, currentPageName }) {
                         {children}
                     </div>
                 </main>
+
+                <footer className="flex-shrink-0 bg-white py-6 px-8">
+                    <div className="max-w-7xl mx-auto text-center">
+                        <p className="text-lg font-semibold text-gray-700 mb-2">
+                            App 5D Theraphists
+                        </p>
+                        <p className="text-sm text-gray-500 mb-2">
+                            criado e desenvolvido para o desenvolvimento das praticas integrativas holisticas terapêuticas
+                        </p>
+                        <p className="text-xs text-gray-400">
+                            @2025 Direitos reservados - Mestre Ricardo
+                        </p>
+                    </div>
+                </footer>
             </div>
 
             <ChatbotFloating />

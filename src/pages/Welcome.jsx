@@ -218,15 +218,26 @@ export default function WelcomePage() {
                     })}
                 </motion.div>
 
-                <motion.p 
-                    className="text-xs text-blue-200/50 mt-8"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
+            </motion.div>
+
+            {/* Rodapé */}
+            <footer className="absolute bottom-0 left-0 right-0 py-6 px-4 text-center z-10">
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.8, duration: 0.5 }}
                 >
-                    © {new Date().getFullYear()} APP 5D Therapists. Todos os direitos reservados.
-                </motion.p>
-            </motion.div>
+                    <p className="text-lg font-semibold text-white/80 mb-2">
+                        App 5D Theraphists
+                    </p>
+                    <p className="text-sm text-blue-100/70 mb-2">
+                        criado e desenvolvido para o desenvolvimento das praticas integrativas holisticas terapêuticas
+                    </p>
+                    <p className="text-xs text-blue-200/50">
+                        @2025 Direitos reservados - Mestre Ricardo
+                    </p>
+                </motion.div>
+            </footer>
         </div>
     );
 }
