@@ -28,15 +28,6 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 1000, // aumenta o limite para 1000 kB
     rollupOptions: {
-      // Externalizar pdfmake conforme sugerido pela mensagem de erro do Rollup
-      // Isso permite que o módulo seja carregado dinamicamente em runtime
-      external: (id) => {
-        // Externalizar imports do pdfmake para evitar erro durante o build
-        if (id.includes('pdfmake/build/pdfmake') || id.includes('pdfmake/build/vfs_fonts')) {
-          return true;
-        }
-        return false;
-      },
       output: {
         manualChunks(id) {
           // Separar node_modules em chunk separado
@@ -49,7 +40,9 @@ export default defineConfig({
             if (normalizedId.includes('/jspdf/') || normalizedId.endsWith('/jspdf')) {
               return 'vendor-pdf';
             }
-            // pdfmake não precisa estar aqui pois será externalizado
+            if (normalizedId.includes('/pdfmake/') || normalizedId.endsWith('/pdfmake')) {
+              return 'vendor-pdfmake';
+            }
             if (normalizedId.includes('/firebase/') || normalizedId.includes('/@firebase/')) {
               return 'vendor-firebase';
             }
@@ -65,17 +58,13 @@ export default defineConfig({
           }
           // Retornar undefined para manter chunk padrão
           return undefined;
-        },
-        // Configurar globals para módulos externalizados (não necessário para imports dinâmicos)
-        globals: {}
+        }
       }
     },
     // Configurações adicionais para lidar com importações dinâmicas
     commonjsOptions: {
-      include: [/node_modules/],
-      transformMixedEsModules: true,
-      // Excluir pdfmake do processamento CommonJS durante o build
-      exclude: [/pdfmake/]
+      include: [/node_modules/, /pdfmake/],
+      transformMixedEsModules: true
     }
   },
 }) 

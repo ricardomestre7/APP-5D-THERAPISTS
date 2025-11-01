@@ -12,18 +12,10 @@ async function getPdfMake() {
     if (!pdfMakeInstance) {
         try {
             console.log('📦 Importando pdfmake...');
-            // Importação dinâmica - usar função helper para evitar análise estática do Rollup
-            // Isso força o carregamento apenas em runtime, não durante o build
-            const loadPdfMake = () => {
-                // Usar Function para criar contexto isolado que o Rollup não pode analisar
-                const loadModule = new Function('modulePath', 'return import(modulePath)');
-                return Promise.all([
-                    loadModule('pdfmake/build/pdfmake.js'),
-                    loadModule('pdfmake/build/vfs_fonts.js')
-                ]);
-            };
-            
-            const [pdfMakeModule, pdfFontsModule] = await loadPdfMake();
+            // Importação dinâmica - usar caminhos diretos que o Vite pode resolver
+            // Não usar external para garantir que o módulo seja incluído no bundle
+            const pdfMakeModule = await import('pdfmake/build/pdfmake');
+            const pdfFontsModule = await import('pdfmake/build/vfs_fonts');
             
             console.log('✅ Módulos importados, configurando...');
             
