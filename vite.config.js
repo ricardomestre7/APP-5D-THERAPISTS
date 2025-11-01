@@ -21,6 +21,33 @@ export default defineConfig({
         '.js': 'jsx',
       },
     },
-    include: ['react', 'react-dom', 'react-router-dom']
+    include: ['react', 'react-dom', 'react-router-dom', 'pdfmake/build/pdfmake']
+  },
+  build: {
+    chunkSizeWarningLimit: 1000, // aumenta o limite para 1000 kB
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          // Separar node_modules em chunk separado
+          if (id.includes('node_modules')) {
+            // Separar bibliotecas grandes em chunks específicos
+            if (id.includes('jspdf')) {
+              return 'vendor-pdf';
+            }
+            if (id.includes('firebase')) {
+              return 'vendor-firebase';
+            }
+            if (id.includes('chart') || id.includes('recharts')) {
+              return 'vendor-charts';
+            }
+            return 'vendor';
+          }
+          // Separar utilitários grandes em chunks próprios
+          if (id.includes('utils/gerarPDF')) {
+            return 'pdf-generator';
+          }
+        }
+      }
+    }
   },
 }) 
