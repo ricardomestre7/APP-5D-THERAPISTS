@@ -4,9 +4,6 @@
  * Código limpo e fácil de manter
  */
 
-// Importar loader dedicado para pdfmake
-import { loadPdfMake } from './pdfmakeLoader.js';
-
 // pdfmake será importado dinamicamente para melhor compatibilidade
 let pdfMakeInstance = null;
 
@@ -14,50 +11,52 @@ let pdfMakeInstance = null;
 async function getPdfMake() {
     if (!pdfMakeInstance) {
         try {
-            console.log('📦 Carregando pdfmake usando loader dedicado...');
+            console.log('📦 Importando pdfmake...');
+            // Importação dinâmica - usar caminhos diretos que o Vite pode resolver
+            const pdfMakeModule = await import('pdfmake/build/pdfmake');
+            const pdfFontsModule = await import('pdfmake/build/vfs_fonts');
             
-            const { pdfMake, vfs } = await loadPdfMake();
+            console.log('✅ Módulos importados, configurando...');
             
-            if (!pdfMake || typeof pdfMake.createPdf !== 'function') {
+            // Obter o objeto correto (pode ser default ou o próprio objeto)
+            const pdfMake = pdfMakeModule.default || pdfMakeModule;
+            
+            if (!pdfMake) {
+                throw new Error('pdfmake não foi encontrado no módulo');
+            }
+            
+            if (!pdfMake.createPdf) {
                 throw new Error('pdfmake.createPdf não está disponível. O módulo pode estar incompleto.');
             }
             
-            // Garantir que vfs está configurado
-            if (vfs && !pdfMake.vfs) {
-                pdfMake.vfs = vfs;
-                console.log('✅ VFS configurado');
+            // Configurar fontes - vfs_fonts pode ter diferentes estruturas
+            const fontsModule = pdfFontsModule.default || pdfFontsModule;
+            let vfs = null;
+            
+            if (fontsModule) {
+                // Tentar diferentes estruturas possíveis
+                vfs = fontsModule.pdfMake?.vfs || 
+                      fontsModule.vfs ||
+                      fontsModule.default?.pdfMake?.vfs ||
+                      fontsModule.default?.vfs ||
+                      fontsModule;
+                
+                if (vfs && typeof vfs === 'object') {
+                    pdfMake.vfs = vfs;
+                    console.log('✅ Fontes configuradas (vfs encontrado)');
+                } else {
+                    console.warn('⚠️ Estrutura de fontes inesperada, tentando usar direto');
+                    pdfMake.vfs = fontsModule;
+                }
+            } else {
+                console.warn('⚠️ Fontes não encontradas, PDF pode ter problemas de renderização');
             }
             
             pdfMakeInstance = pdfMake;
             console.log('✅ pdfmake inicializado com sucesso');
         } catch (error) {
-            console.error('❌ Erro ao carregar pdfmake:', error);
-            console.error('📋 Detalhes do erro:', {
-                message: error.message,
-                stack: error.stack,
-                name: error.name
-            });
-            
-            // Tentar fallback com require se disponível (em ambiente Node.js)
-            if (typeof require !== 'undefined') {
-                try {
-                    console.log('🔄 Tentando fallback com require...');
-                    const pdfMake = require('pdfmake/build/pdfmake');
-                    const pdfFonts = require('pdfmake/build/vfs_fonts');
-                    
-                    let vfs = pdfFonts?.pdfMake?.vfs || pdfFonts?.vfs || pdfFonts;
-                    if (vfs) {
-                        pdfMake.vfs = vfs;
-                    }
-                    pdfMakeInstance = pdfMake;
-                    console.log('✅ pdfmake carregado via require');
-                } catch (requireError) {
-                    console.error('❌ Erro ao usar require como fallback:', requireError);
-                    throw error;
-                }
-            } else {
-                throw error;
-            }
+            console.error('❌ Erro ao importar pdfmake:', error);
+            throw error;
         }
     }
     return pdfMakeInstance;
