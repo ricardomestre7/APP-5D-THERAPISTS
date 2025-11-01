@@ -1855,7 +1855,7 @@ export async function gerarPDFRelatorio({
                         console.warn('⚠️ Item inválido removido do content:', typeof item);
                         return false;
                     });
-            })()
+            })(),
             styles: {
                 // Estilos da Capa (cores holísticas azul/verde)
                 tituloCapa: {
