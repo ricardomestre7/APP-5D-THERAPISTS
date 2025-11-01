@@ -1,6 +1,6 @@
 // Sistema de Pacientes com Firebase Firestore
 import { queryDocuments, createDocument, getDocument, updateDocument, deleteDocument } from './firestoreHelpers';
-import { getCurrentUser, onAuthChange } from './firebaseAuth';
+import { getCurrentUser, onAuthChange, changePassword } from './firebaseAuth';
 
 export const Paciente = {
     filter: async (params, order) => {
@@ -3105,7 +3105,6 @@ export const ErvaPlanta = {
             }
         },
         updatePassword: async (newPassword) => {
-            const { changePassword } = await import('./firebaseAuth');
             return await changePassword(newPassword);
         }
     };

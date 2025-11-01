@@ -61,12 +61,27 @@ export default function RelatoriosPage() {
     };
 
     const handleGerarPDF = async () => {
-        if (!analise || !pacienteSelecionado) return;
+        console.log('🖱️ Botão "Gerar PDF" clicado na página Relatórios!');
+        console.log('📊 Estado atual:', {
+            hasAnalise: !!analise,
+            pacienteSelecionado,
+            totalSessoes: sessoes?.length || 0
+        });
         
+        if (!analise || !pacienteSelecionado) {
+            console.warn('⚠️ Validação falhou: analise ou pacienteSelecionado vazio');
+            alert('É necessário selecionar um paciente e gerar a análise antes de gerar o PDF.');
+            return;
+        }
+        
+        console.log('✅ Validação passou, iniciando geração...');
         setIsGeneratingPDF(true);
+        
         try {
             const paciente = pacientes.find(p => p.id === pacienteSelecionado);
+            console.log('👤 Paciente encontrado:', paciente?.nome || 'N/A');
             
+            console.log('📄 Chamando gerarPDFRelatorio...');
             await gerarPDFRelatorio({
                 pacienteNome: paciente?.nome || 'Paciente',
                 analise,
@@ -74,11 +89,13 @@ export default function RelatoriosPage() {
                 sessoes: sessoes,
                 terapias: terapias // Passar terapias para renderizar gráficos corretamente
             });
-            
+            console.log('✅ PDF gerado com sucesso!');
         } catch (error) {
-            console.error('Erro ao gerar PDF:', error);
-            alert('Erro ao gerar PDF. Tente novamente.');
+            console.error('❌ Erro ao gerar PDF:', error);
+            console.error('📋 Stack trace:', error.stack);
+            alert(`Erro ao gerar PDF: ${error.message || 'Erro desconhecido'}. Verifique o console para mais detalhes.`);
         } finally {
+            console.log('🏁 Finalizando processo de geração de PDF...');
             setIsGeneratingPDF(false);
         }
     };
@@ -280,9 +297,15 @@ export default function RelatoriosPage() {
                     {analise && (
                         <div className="mt-6 flex gap-4 justify-end">
                             <Button
-                                onClick={handleGerarPDF}
-                                disabled={isGeneratingPDF}
-                                className="bg-blue-600 hover:bg-blue-700 text-white"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    console.log('🖱️ Clique no botão detectado (Relatórios)!');
+                                    handleGerarPDF();
+                                }}
+                                disabled={isGeneratingPDF || !analise || !pacienteSelecionado}
+                                className="bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                title={(!analise || !pacienteSelecionado) ? 'É necessário selecionar um paciente e gerar a análise primeiro' : 'Gerar relatório PDF completo'}
                             >
                                 {isGeneratingPDF ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <FileDown className="w-4 h-4 mr-2" />}
                                 {isGeneratingPDF ? 'Gerando PDF...' : 'Gerar Relatório PDF'}

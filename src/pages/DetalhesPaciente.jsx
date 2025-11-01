@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 // Base44 removido
 import { useAnalisadorQuantico } from '../components/AnalisadorQuantico';
 import GraficoSnapshotSessao from '../components/graficos/GraficoSnapshotSessao';
+import { gerarPDFRelatorio } from '@/utils/gerarPDF';
 
 const QuantumCard = ({ children, className, ...props }) => (
     <Card 
@@ -205,22 +206,34 @@ export default function DetalhesPaciente() {
     };
 
     const handleGerarPDF = async () => {
+        console.log('🖱️ Botão "Gerar PDF" clicado!');
+        console.log('📊 Estado atual:', {
+            hasAnalise: !!analise,
+            totalSessoes: sessoes?.length || 0,
+            pacienteNome: paciente?.nome
+        });
+        
         if (!analise || sessoes.length === 0) {
+            console.warn('⚠️ Validação falhou: analise ou sessoes vazias');
             alert('É necessário ter pelo menos uma sessão registrada para gerar o relatório.');
             return;
         }
         
+        console.log('✅ Validação passou, iniciando geração...');
         setIsGeneratingPDF(true);
+        
         try {
-            const { gerarPDFRelatorio } = await import('@/utils/gerarPDF');
+            console.log('👤 Buscando informações do terapeuta...');
             const user = await UserEntity.me();
+            console.log('✅ Terapeuta encontrado:', user?.full_name || 'N/A');
             
-            // Preparar objeto de terapias para o PDF (id -> objeto completo)
-            const terapiasMap = {};
-            terapias.forEach(terapia => {
-                terapiasMap[terapia.id] = terapia;
-            });
+            // terapias já é um objeto (Map), não precisa converter novamente
+            // Se vier como objeto vazio, já está no formato correto
+            const terapiasMap = typeof terapias === 'object' && !Array.isArray(terapias) 
+                ? terapias 
+                : {};
             
+            console.log('📄 Chamando gerarPDFRelatorio...');
             await gerarPDFRelatorio({
                 pacienteNome: paciente.nome,
                 analise: analise,
@@ -228,8 +241,10 @@ export default function DetalhesPaciente() {
                 sessoes: sessoes,
                 terapias: terapiasMap
             });
+            console.log('✅ PDF gerado com sucesso!');
         } catch (error) {
-            console.error('Erro ao gerar PDF:', error);
+            console.error('❌ Erro ao gerar PDF:', error);
+            console.error('📋 Stack trace:', error.stack);
             
             // Mensagem de erro mais detalhada
             let mensagemErro = 'Erro ao gerar PDF. ';
@@ -245,6 +260,7 @@ export default function DetalhesPaciente() {
             
             alert(mensagemErro);
         } finally {
+            console.log('🏁 Finalizando processo de geração de PDF...');
             setIsGeneratingPDF(false);
         }
     };
@@ -276,9 +292,15 @@ export default function DetalhesPaciente() {
                     {sessoes.length > 0 && (
                         <>
                             <Button
-                                onClick={handleGerarPDF}
-                                disabled={isGeneratingPDF}
-                                className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    console.log('🖱️ Clique no botão detectado!');
+                                    handleGerarPDF();
+                                }}
+                                disabled={isGeneratingPDF || !analise || sessoes.length === 0}
+                                className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                title={(!analise || sessoes.length === 0) ? 'É necessário ter análise e sessões para gerar o relatório' : 'Gerar relatório PDF completo'}
                             >
                                 {isGeneratingPDF ? (
                                     <><Loader2 className="w-5 h-5 animate-spin" /> Gerando...</>
